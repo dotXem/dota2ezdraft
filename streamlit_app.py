@@ -56,7 +56,7 @@ xem_list = ["Chaos Knight", "Luna", "Spectre", "Muerta", "Lifestealer", "Phantom
 
 @st.cache_data
 def get_data():
-    with open("simple_draft/dotabuff_data.yaml", "r") as file:
+    with open("dotabuff_data.yaml", "r") as file:
         data = yaml.load(file, Loader=yaml.FullLoader)
     return data
 
@@ -132,7 +132,7 @@ nickname_table = {
     "Bat": 'Batrider'
 }
 
-st.title('Dota2 - Draft Like a Pro')
+st.title('Dota2 - EZDraft')
 st.set_option('deprecation.showPyplotGlobalUse', False)
 
 heroes_str = st.text_input( "Heroes (separated by commas)")
@@ -162,7 +162,7 @@ data = get_data()
 
 
 def suggest_hero(p1=None, p2=None, p3=None, p4=None, p5=None, method="matchup_winrate", filter_list=heroes):
-    with open("simple_draft/dotabuff_data.yaml", "r") as file:
+    with open("dotabuff_data.yaml", "r") as file:
         data = yaml.load(file, Loader=yaml.FullLoader)
 
     enemy_team = [p1,p2,p3,p4,p5] 
