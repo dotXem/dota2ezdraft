@@ -195,7 +195,6 @@ def suggest_hero(p1=None, p2=None, p3=None, p4=None, p5=None, method="matchup_wi
     df["min"] = df.min(axis=1)
     df["matchup_winrate"] = df.mean(axis=1)
     df["global_winrate"] = np.array([winrates[hero]*100 for hero in filter_list  ])
-    df["advantage"] = df["matchup_winrate"] - df["global_winrate"]
 
     heroes_adv = []
     for hero in enemy_team:
@@ -212,6 +211,7 @@ def suggest_hero(p1=None, p2=None, p3=None, p4=None, p5=None, method="matchup_wi
     )    
 
     df = pd.concat([df, matchup_df],axis=1)
+    df["advantage"] = df.loc[:, matchup_df].mean()
 
     df["nb_counters"] = (df.loc[:,matchup_adv_cols] <= -2.21212).sum(axis=1) #len(np.where(np.array(heroes_adv) <=  -2.21212)[0])
     df["nb_countered"] = (df.loc[:,matchup_adv_cols] >= 2.3972399999999987).sum(axis=1)
