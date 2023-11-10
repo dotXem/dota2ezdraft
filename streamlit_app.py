@@ -53,6 +53,11 @@ p5_list = p4_list
 
 xem_list = ["Chaos Knight", "Luna", "Spectre", "Muerta", "Lifestealer", "Phantom Lancer", "Faceless Void", "Ursa", "Riki", "Wraith King", "Drow Ranger", "Slark", "Gyrocopter", "Bristleback", "Weaver", "Morphling", "Phantom Assassin"]
 
+GBO_p4_list = ["Queen of Pain", "Zeus", "Invoker", "Spirit Breaker", "Phoenix", "Dazzle", "Undying", "Shadow Shaman", "Pudge", "Gyrocopter", "Clinkz", "Venomancer", "Earthshaker", "Ogre Magi", "Nature's Prophet"]
+thunder_p2_list = ["Invoker", "Pangolier", "Outworld Devourer", "Tusk", "Kunkka", "Earthshaker", "Necrophos", "Dazzle", "Spirit Breaker", "Earth Spirit", "Primal Beast", "Puck", "Zeus"]
+lunatix_p3_list = ["Brewmaster", "Visage", "Broodmother", "Razor", "Dazzle", "Bristleback", "Primal Beast", "Axe", "Earthshaker"]
+exit_p5_list = ["Shadow Shaman", "Witch Doctor", "Lion", "Crystal Maiden", "Treant Protector", "Lich", "Warlock", "Venomancer", "Spirit Breaker", "Vengeful Spirit", "Snapfire", "Dazzle", "Bane", "Jakiro", "Ancient Apparition", "Omniknight", "Earthshaker", "Ogre Magi"]
+ice_b_list = xem_list+GBO_p4_list+thunder_p2_list+lunatix_p3_list+exit_p5_list
 
 @st.cache_data
 def get_data():
@@ -146,7 +151,11 @@ filter_list_str = st.selectbox(
         "p3",
         "p4",
         "p5",
-        "Xem's p1"
+        "Xem's p1",
+        "Thunder's p2",
+        "Lunatix's p3",
+        "GBO's p4",
+        "Exit's p5"
     ]
 )
 filter_list = {
@@ -156,7 +165,11 @@ filter_list = {
     "p3": p3_list,
     "p4": p4_list,
     "p5": p5_list,
-    "Xem's p1": xem_list
+    "Xem's p1": xem_list,
+    "Thunder's p2": thunder_p2_list,
+    "Lunatix's p3": lunatix_p3_list,
+    "GBO's p4": GBO_p4_list,
+    "Exit's p5": exit_p5_list
 }.get(filter_list_str)
 data = get_data()
 
