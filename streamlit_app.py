@@ -155,7 +155,8 @@ filter_list_str = st.selectbox(
         "Thunder's p2",
         "Lunatix's p3",
         "GBO's p4",
-        "Exit's p5"
+        "Exit's p5",
+        "Icewrack B",
     ]
 )
 filter_list = {
@@ -169,7 +170,8 @@ filter_list = {
     "Thunder's p2": thunder_p2_list,
     "Lunatix's p3": lunatix_p3_list,
     "GBO's p4": GBO_p4_list,
-    "Exit's p5": exit_p5_list
+    "Exit's p5": exit_p5_list,
+    "Icewrack B": ice_b_list
 }.get(filter_list_str)
 data = get_data()
 
