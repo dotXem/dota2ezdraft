@@ -57,7 +57,7 @@ GBO_p4_list = ["Queen of Pain", "Zeus", "Invoker", "Spirit Breaker", "Phoenix", 
 thunder_p2_list = ["Invoker", "Pangolier", "Outworld Devourer", "Tusk", "Kunkka", "Earthshaker", "Necrophos", "Dazzle", "Spirit Breaker", "Earth Spirit", "Primal Beast", "Puck", "Zeus"]
 lunatix_p3_list = ["Brewmaster", "Visage", "Broodmother", "Razor", "Dazzle", "Bristleback", "Primal Beast", "Axe", "Earthshaker"]
 exit_p5_list = ["Shadow Shaman", "Witch Doctor", "Lion", "Crystal Maiden", "Treant Protector", "Lich", "Warlock", "Venomancer", "Spirit Breaker", "Vengeful Spirit", "Snapfire", "Dazzle", "Bane", "Jakiro", "Ancient Apparition", "Omniknight", "Earthshaker", "Ogre Magi"]
-ice_b_list = xem_list+GBO_p4_list+thunder_p2_list+lunatix_p3_list+exit_p5_list
+ice_b_list = list(set(xem_list+GBO_p4_list+thunder_p2_list+lunatix_p3_list+exit_p5_list))
 
 @st.cache_data
 def get_data():
