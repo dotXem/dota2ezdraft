@@ -51,7 +51,7 @@ p4_list = ['Witch Doctor', 'Treant Protector', 'Jakiro',
  'Rubick', 'Batrider']
 p5_list = p4_list
 
-xem_list = ["Chaos Knight", "Luna", "Spectre", "Muerta", "Lifestealer", "Phantom Lancer", "Faceless Void", "Ursa", "Riki", "Wraith King", "Drow Ranger", "Slark", "Gyrocopter", "Bristleback", "Weaver", "Morphling", "Phantom Assassin", "Juggernaut", "Lone Druid", "Anti-Mage", "Sven", "Troll Warlord", "Sniper", "Medusa"]
+xem_list = ["Chaos Knight", "Luna", "Spectre", "Muerta", "Lifestealer", "Phantom Lancer", "Faceless Void", "Ursa", "Riki", "Wraith King", "Drow Ranger", "Slark", "Gyrocopter", "Bristleback", "Weaver", "Morphling", "Phantom Assassin", "Juggernaut", "Lone Druid", "Anti-Mage", "Sven", "Troll Warlord", "Sniper", "Medusa", "Bloodseeker"]
 
 GBO_p4_list = ["Queen of Pain", "Zeus", "Invoker", "Spirit Breaker", "Phoenix", "Dazzle", "Undying", "Shadow Shaman", "Pudge", "Gyrocopter", "Clinkz", "Venomancer", "Earthshaker", "Ogre Magi", "Nature's Prophet"]
 thunder_p2_list = ["Invoker", "Pangolier", "Outworld Devourer", "Tusk", "Kunkka", "Earthshaker", "Necrophos", "Dazzle", "Spirit Breaker", "Earth Spirit", "Primal Beast", "Puck", "Zeus"]
