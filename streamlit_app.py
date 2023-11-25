@@ -61,7 +61,7 @@ ice_b_list = list(set(xem_list+GBO_p4_list+thunder_p2_list+lunatix_p3_list+exit_
 
 @st.cache_data
 def get_data():
-    with open("dotabuff_data.yaml", "r") as file:
+    with open("dotabuff_data_7-34d_25_11.yaml", "r") as file:
         data = yaml.load(file, Loader=yaml.FullLoader)
     return data
 

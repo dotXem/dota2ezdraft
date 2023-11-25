@@ -54,10 +54,48 @@ def get_page_from_dotabuff(driver, url):
     tree = html.fromstring(html_content)
     return tree
 
+def get_winrate_data(driver):
+    tree = get_page_from_dotabuff(driver, "https://www.dotabuff.com/heroes/winning")
+    divs = tree.xpath("//table[@class='sortable']//tbody//tr//td")
+    attribs = [div.attrib["data-value"] for div in divs]
+    attribs = np.reshape(attribs, (-1, 5))
+    heroes_wr = attribs[:, 0]
+    heroes_wr[np.where(heroes_wr == "Outworld Destroyer")[0][0]] = "Outworld Devourer"
+    heroes_wr = heroes_wr.tolist()
+    winrates = attribs[:, 2].astype(float) / 100
+    winrates = winrates.tolist()
+    winrate_data = {
+        hero:winrate
+        for hero, winrate in zip(heroes_wr, winrates)
+    }
+
+    # tree = get_page_from_dotabuff(driver, "https://www.dotabuff.com/heroes/meta?view=played&metric=rating_bracket")
+    # divs = tree.xpath("//table[@class='sortable no-arrows r-tab-enabled']//tbody//tr//td")
+    # attribs = [div.attrib["data-value"] for div in divs]
+    # attribs = np.reshape(attribs, (-1, 12))
+    # heroes_wr = attribs[:, 0]
+    # heroes_wr[np.where(heroes_wr == "Outworld Destroyer")[0][0]] = "Outworld Devourer"
+    # heroes_wr = heroes_wr.tolist()
+
+    # winrate_data = {
+    #     hero: {
+    #         "Crusader-": float(attrib[3]) / 100,
+    #         "Archon": float(attrib[5]) / 100,
+    #         "Legend": float(attrib[7]) / 100,
+    #         "Ancient": float(attrib[9]) / 100,
+    #         "Divine+": float(attrib[11]) / 100
+    #     }
+    #     for hero, attrib in zip(heroes_wr, attribs)
+    # }
+
+    # for hero, winrate in zip(heroes_wr, winrates):
+    #     winrate_data[hero]["All"] = winrate
+
+    return winrate_data
 
 def collect_today_disadvantages():
     options = Options()
-    options.add_argument("--headless")
+    # options.add_argument("--headless") # disabled has wad making the scraping not working
     options.add_argument("--disable-gpu")
     options.add_argument("--no-sandbox")
     options.add_argument("enable-automation")
@@ -73,29 +111,13 @@ def collect_today_disadvantages():
     driver = webdriver.Chrome(ChromeDriverManager().install(), options=options)
     logging.info("Driver installed.")
 
-    tree = get_page_from_dotabuff(driver, "https://www.dotabuff.com/heroes/winning")
-
-    logging.info("Computing data...")
-    divs = tree.xpath("//table[@class='sortable']//tbody//tr//td")
-    attribs = [div.attrib["data-value"] for div in divs]
-    attribs = np.reshape(attribs, (-1, 5))
-    heroes_wr = attribs[:, 0]
-    heroes_wr[np.where(heroes_wr == "Outworld Destroyer")[0][0]] = "Outworld Devourer"
-    heroes_wr = heroes_wr.tolist()
-    winrates = attribs[:, 2].astype(float) / 100
-    winrates = winrates.tolist()
-
-    winrate_data = {
-        hero:winrate
-        for hero, winrate in zip(heroes_wr, winrates)
-    }
-
+    winrate_data = get_winrate_data(driver)
     # with open("heroes_winrate.yaml", "w") as file:
     #     yaml.dump(winrate_data, file)
 
     heroes_disadvantage = {}
     heroes_matchup_winrates = {}
-    for hero in ["Outworld Devourer"]: #heroes:
+    for hero in heroes:
         logging.info(f"Fetching {hero} data")
         hero_url = hero.lower().replace(' ', '-')
         if hero == "Outworld Devourer":
@@ -130,7 +152,6 @@ def collect_today_disadvantages():
             hero_counter: float(matchup_winrate)
             for hero_counter, matchup_winrate in zip(hero_counters, matchup_winrates)
         }
-        break
 
     data = {
         hero: {
@@ -138,10 +159,10 @@ def collect_today_disadvantages():
             "matchup_disadvantage": heroes_disadvantage[hero],
             "matchup_winrate": heroes_matchup_winrates[hero]
         }
-        for hero in ["Outworld Devourer"]
+        for hero in heroes
     }
 
-    with open("simple_draft/dotabuff_data_od.yaml", "w") as file:
+    with open("dotabuff_data_7-34d.yaml", "w") as file:
         yaml.dump(data, file)
 
 xem_list = ["Chaos Knight", "Luna", "Spectre", "Muerta", "Lifestealer", "Phantom Lancer", "Faceless Void", "Ursa", "Riki", "Wraith King", "Drow Ranger", "Slark", "Gyrocopter", "Bristleback", "Weaver", "Morphling", "Phantom Assassin"]
