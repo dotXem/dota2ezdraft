@@ -7,13 +7,16 @@ sys.path.append(os.path.dirname(SCRIPT_DIR))
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium import webdriver
 import time
-from lxml import html
+from lxml import html, etree
 import yaml 
 import pandas as pd
+import json, requests
 
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+
+STRATZ_API_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJTdWJqZWN0IjoiYTEyYTYzYjUtOWI2My00OThkLThlZjEtOGNhZmJiNDliZDY1IiwiU3RlYW1JZCI6IjM2MzM5Mjk3IiwibmJmIjoxNzAxNTExNDU2LCJleHAiOjE3MzMwNDc0NTYsImlhdCI6MTcwMTUxMTQ1NiwiaXNzIjoiaHR0cHM6Ly9hcGkuc3RyYXR6LmNvbSJ9.Nub3VZ58_I-jSZkfca6WI8TVNZbeDmNhjwgxK9xuyGM"
 
 heroes = ['Witch Doctor', 'Spectre', 'Chaos Knight', 'Wraith King', 'Slardar',
  'Necrophos', 'Sand King', 'Lone Druid', 'Kunkka', 'Treant Protector', 'Jakiro',
@@ -48,7 +51,104 @@ logging.basicConfig(
 def get_page_from_dotabuff(driver, url):
     logging.info("Fetching URL...")
     driver.get(url)
-    time.sleep(3)
+    time.sleep(1500)
+    logging.info("Parsing page content...")
+    html_content = driver.execute_script("return document.documentElement.innerHTML;")
+    tree = html.fromstring(html_content)
+    return tree
+
+def get_data_from_stratz():
+    with open("stratz_hero_to_id.yaml", "r") as file:
+        stratz_hero_to_id = yaml.load(file, Loader=yaml.FullLoader)
+
+    stratz_id_to_hero = {
+        id:hero for hero, id in stratz_hero_to_id.items()
+    }
+
+    querry = """
+    {
+        heroStats {
+            heroVsHeroMatchup(heroId: {hero_id}) {
+                disadvantage {
+                    heroId
+                    vs {
+                        heroId1
+                        heroId2
+                        winsAverage
+                        winRateHeroId2
+                        winRateHeroId1
+                        winCount
+                        matchCount
+                        synergy
+                    }
+                    with {
+                        heroId1
+                        heroId2
+                        winsAverage
+                        winRateHeroId2
+                        winRateHeroId1
+                        winCount
+                        matchCount
+                        synergy
+                    }
+                }
+            }
+        }
+    }
+    """
+
+    data = {}
+
+    for hero in heroes:
+        print(f"Collecting {hero} data...")
+        hero_id = stratz_hero_to_id[hero]
+
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {STRATZ_API_TOKEN}',
+        }
+
+        payload = json.dumps({'query': querry.replace("{hero_id}", str(hero_id))
+        })
+
+        response = requests.post("https://api.stratz.com/graphql", headers=headers, data=payload)
+
+        if response.status_code == 200:
+            result = response.json()
+        else:
+            print(f"Error: {response.status_code} - {response.text}")
+
+        result = result["data"]["heroStats"]["heroVsHeroMatchup"]["disadvantage"][0]
+        
+
+        data[hero] = {
+            "matchup_disadvantage": {
+                stratz_id_to_hero[matchup["heroId2"]] :  matchup["synergy"]
+                for matchup in result["vs"]
+            },
+            "matchup_winrate": {
+                stratz_id_to_hero[matchup["heroId2"]]  : matchup["winsAverage"]
+                for matchup in result["vs"]
+            },            
+            "synergy_disadvantage": {
+                stratz_id_to_hero[matchup["heroId2"]]  : matchup["synergy"]
+                for matchup in result["with"]
+            },
+            "synergy_winrate": {
+                stratz_id_to_hero[matchup["heroId2"]]  : matchup["winsAverage"]
+                for matchup in result["with"]
+            },
+            "winrate": result["vs"][0]["winRateHeroId1"]
+        }
+
+        time.sleep(1)
+
+    return data
+
+def get_page_from_stratz(driver, url):
+    logging.info("Fetching URL...")
+    driver.get(url)
+    time.sleep(5)
     logging.info("Parsing page content...")
     html_content = driver.execute_script("return document.documentElement.innerHTML;")
     tree = html.fromstring(html_content)
@@ -93,28 +193,7 @@ def get_winrate_data(driver):
 
     return winrate_data
 
-def collect_today_disadvantages():
-    options = Options()
-    # options.add_argument("--headless") # disabled has wad making the scraping not working
-    options.add_argument("--disable-gpu")
-    options.add_argument("--no-sandbox")
-    options.add_argument("enable-automation")
-    options.add_argument("--disable-infobars")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("start-maximized")
-
-    # Chrome is controlled by automated test software
-    options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    options.add_experimental_option('useAutomationExtension', False)
-
-    logging.info("Installing Google Chrome driver...")
-    driver = webdriver.Chrome(ChromeDriverManager().install(), options=options)
-    logging.info("Driver installed.")
-
-    winrate_data = get_winrate_data(driver)
-    # with open("heroes_winrate.yaml", "w") as file:
-    #     yaml.dump(winrate_data, file)
-
+def get_counters_from_dotabuff(driver):
     heroes_disadvantage = {}
     heroes_matchup_winrates = {}
     for hero in heroes:
@@ -128,7 +207,8 @@ def collect_today_disadvantages():
         success = False
         while not success:
             try:
-                tree = get_page_from_dotabuff(driver, url)
+                # tree = get_page_from_dotabuff(driver, url)
+                tree = get_page_from_stratz(driver, url)
                 success = True
             except:
                 pass
@@ -152,6 +232,33 @@ def collect_today_disadvantages():
             hero_counter: float(matchup_winrate)
             for hero_counter, matchup_winrate in zip(hero_counters, matchup_winrates)
         }
+    return heroes_disadvantage, heroes_matchup_winrates
+
+def get_data_from_dotabuff():
+    options = Options()
+    # options.add_argument("--headless") # disabled has wad making the scraping not working
+    options.add_argument("--disable-gpu")
+    options.add_argument("--no-sandbox")
+    options.add_argument("enable-automation")
+    options.add_argument("--disable-infobars")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("start-maximized")
+
+    # Chrome is controlled by automated test software
+    options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    options.add_experimental_option('useAutomationExtension', False)
+
+    logging.info("Installing Google Chrome driver...")
+    driver = webdriver.Chrome(ChromeDriverManager().install(), options=options)
+    driver.implicitly_wait(10)
+    logging.info("Driver installed.")
+
+
+    winrate_data = get_winrate_data(driver)
+    with open("heroes_winrate.yaml", "w") as file:
+        yaml.dump(winrate_data, file)
+
+    heroes_disadvantage, heroes_matchup_winrates = get_counters_from_dotabuff(driver)
 
     data = {
         hero: {
@@ -162,10 +269,17 @@ def collect_today_disadvantages():
         for hero in heroes
     }
 
-    with open("dotabuff_data_7-34d.yaml", "w") as file:
+    return data
+
+def collect_today_disadvantages():
+    # data = get_data_from_dotabuff()
+    data = get_data_from_stratz()
+
+
+    with open("dotabuff_data_7-34d_stratz.yaml", "w") as file:
         yaml.dump(data, file)
 
-xem_list = ["Chaos Knight", "Luna", "Spectre", "Muerta", "Lifestealer", "Phantom Lancer", "Faceless Void", "Ursa", "Riki", "Wraith King", "Drow Ranger", "Slark", "Gyrocopter", "Bristleback", "Weaver", "Morphling", "Phantom Assassin"]
+xem_list = ["Chaos Knight", "Luna", "Spectre", "Muerta", "Lifestealer", "Phantom Lancer", "Faceless Void", "Ursa", "Riki", "Wraith King", "Drow Ranger", "Slark", "Gyrocopter", "Bristleback", "Weaver", "Morphling", "Phantom Assassin", "Lycan"]
 
  
 
