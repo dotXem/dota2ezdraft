@@ -216,7 +216,7 @@ def suggest_hero(p1=None, p2=None, p3=None, p4=None, p5=None, method="matchup_wi
     heroes_adv = []
     for hero in enemy_team:
         if "Unknown" not in hero:
-            hero_adv = [data[hero]["matchup_disadvantage"][suggested_hero]   for suggested_hero in df.index]
+            hero_adv = [-data[hero]["matchup_disadvantage"][suggested_hero]   for suggested_hero in df.index]
         else:
             hero_adv = [0.0] * len(df.index)
         heroes_adv.append(hero_adv) 
