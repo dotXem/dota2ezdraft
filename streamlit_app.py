@@ -210,7 +210,7 @@ def suggest_hero(p1=None, p2=None, p3=None, p4=None, p5=None, method="matchup_wi
     df = pd.DataFrame.from_dict(suggestion_data)
     df["max"] = df.max(axis=1)
     df["min"] = df.min(axis=1)
-    df["matchup_winrate"] = df.mean(axis=1)
+    df["matchup_winrate"] = df.mean(axis=1) * 100
     df["global_winrate"] = np.array([winrates[hero]*100 for hero in filter_list  ])
 
     heroes_adv = []
@@ -236,6 +236,10 @@ def suggest_hero(p1=None, p2=None, p3=None, p4=None, p5=None, method="matchup_wi
     df["positive_counter_count_condition"] = df["counter_count"] >= 0.0
     df["meta_condition"] = df["matchup_winrate"] >= 50.0
     df["good_matchups_condition"] = df["advantage"] >= 0.0
+
+    print(df["positive_counter_count_condition"].astype(int))
+    print(df["meta_condition"].astype(int))
+    print(df["good_matchups_condition"].astype(int))
 
     df["score"] =  df["positive_counter_count_condition"].astype(int) + df["meta_condition"].astype(int) + df["good_matchups_condition"].astype(int)
 
