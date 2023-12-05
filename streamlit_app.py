@@ -6,6 +6,8 @@ import yaml
 import pandas as pd
 import numpy as np
 
+data_file_name = "dotabuff_data_7-34d_stratz_03-12.yaml"
+
 heroes = ['Witch Doctor', 'Spectre', 'Chaos Knight', 'Wraith King', 'Slardar',
  'Necrophos', 'Sand King', 'Lone Druid', 'Kunkka', 'Treant Protector', 'Jakiro',
  'Arc Warden', 'Phantom Lancer', 'Warlock', 'Meepo', 'Silencer', 'Abaddon',
@@ -61,7 +63,7 @@ ice_b_list = list(set(xem_list+GBO_p4_list+thunder_p2_list+lunatix_p3_list+exit_
 
 @st.cache_data
 def get_data():
-    with open("dotabuff_data_7-34d_stratz_03-12.yaml", "r") as file:
+    with open(data_file_name, "r") as file:
         data = yaml.load(file, Loader=yaml.FullLoader)
     return data
 
@@ -177,7 +179,7 @@ data = get_data()
 
 
 def suggest_hero(p1=None, p2=None, p3=None, p4=None, p5=None, method="matchup_winrate", filter_list=heroes):
-    with open("dotabuff_data.yaml", "r") as file:
+    with open(data_file_name, "r") as file:
         data = yaml.load(file, Loader=yaml.FullLoader)
 
     enemy_team = [p1,p2,p3,p4,p5] 
