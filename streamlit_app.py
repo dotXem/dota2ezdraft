@@ -198,7 +198,7 @@ def suggest_hero(p1=None, p2=None, p3=None, p4=None, p5=None, method="matchup_wi
     suggestion_data = {
        enemy_hero:  {
 
-            suggested_hero: matchup_winrates[suggested_hero][enemy_hero] if "Unknown" not in enemy_hero else winrates[suggested_hero] * 100
+            suggested_hero: matchup_winrates[suggested_hero][enemy_hero] * 100 if "Unknown" not in enemy_hero else winrates[suggested_hero] * 100
             for suggested_hero in filter_list
             if enemy_hero != suggested_hero
              
@@ -210,7 +210,9 @@ def suggest_hero(p1=None, p2=None, p3=None, p4=None, p5=None, method="matchup_wi
     df = pd.DataFrame.from_dict(suggestion_data)
     df["max"] = df.max(axis=1)
     df["min"] = df.min(axis=1)
-    df["matchup_winrate"] = df.mean(axis=1) * 100
+
+    print(df.head())
+    df["matchup_winrate"] = df.mean(axis=1)
     df["global_winrate"] = np.array([winrates[hero]*100 for hero in filter_list  ])
 
     heroes_adv = []
