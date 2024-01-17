@@ -6,7 +6,7 @@ import yaml
 import pandas as pd
 import numpy as np
 
-data_file_name = "dotabuff_data_7-34d_stratz_03-12.yaml"
+data_file_name = "dotabuff_data_7-35b_stratz.yaml"
 
 heroes = ['Witch Doctor', 'Spectre', 'Chaos Knight', 'Wraith King', 'Slardar',
  'Necrophos', 'Sand King', 'Lone Druid', 'Kunkka', 'Treant Protector', 'Jakiro',
