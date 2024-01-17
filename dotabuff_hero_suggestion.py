@@ -276,7 +276,7 @@ def collect_today_disadvantages():
     data = get_data_from_stratz()
 
 
-    with open("dotabuff_data_7-34d_stratz.yaml", "w") as file:
+    with open("dotabuff_data_7-35b_stratz.yaml", "w") as file:
         yaml.dump(data, file)
 
 xem_list = ["Chaos Knight", "Luna", "Spectre", "Muerta", "Lifestealer", "Phantom Lancer", "Faceless Void", "Ursa", "Riki", "Wraith King", "Drow Ranger", "Slark", "Gyrocopter", "Bristleback", "Weaver", "Morphling", "Phantom Assassin", "Lycan"]

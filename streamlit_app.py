@@ -53,13 +53,22 @@ p4_list = ['Witch Doctor', 'Treant Protector', 'Jakiro',
  'Rubick', 'Batrider']
 p5_list = p4_list
 
-xem_list = ["Chaos Knight", "Luna", "Spectre", "Muerta", "Lifestealer", "Phantom Lancer", "Faceless Void", "Ursa", "Riki", "Wraith King", "Drow Ranger", "Slark", "Gyrocopter", "Bristleback", "Weaver", "Morphling", "Phantom Assassin", "Juggernaut", "Lone Druid", "Anti-Mage", "Sven", "Troll Warlord", "Sniper", "Medusa", "Bloodseeker", "Lycan"]
+xem_list = ["Faceless Void", "Drow Ranger", "Morphling", "Windranger", "Phantom Lancer", "Luna", "Slark", "Spectre", "Ursa", "Juggernaut", "Anti-Mage"]
+xem_list_extended = ["Chaos Knight", "Luna", "Spectre", "Muerta", "Lifestealer", "Phantom Lancer", "Faceless Void", "Ursa", "Riki", "Wraith King", "Drow Ranger", "Slark", "Gyrocopter", "Bristleback", "Weaver", "Morphling", "Phantom Assassin", "Juggernaut", "Lone Druid", "Anti-Mage", "Sven", "Troll Warlord", "Sniper", "Medusa", "Bloodseeker", "Lycan"]
+leshlagg_list = []
+leshlagg_list_extended = []
+lejiice_list  = []
+lejiice_list_extended = []
+insonore_list = []
+insonore_list_extended = []
+cindy_list = []
+cindy_list_extended = []
+cataquack_list = []
+cataquack_list_extended = []
 
-GBO_p4_list = ["Queen of Pain", "Zeus", "Invoker", "Spirit Breaker", "Phoenix", "Dazzle", "Undying", "Shadow Shaman", "Pudge", "Gyrocopter", "Clinkz", "Venomancer", "Earthshaker", "Ogre Magi", "Nature's Prophet"]
-thunder_p2_list = ["Invoker", "Pangolier", "Outworld Devourer", "Tusk", "Kunkka", "Earthshaker", "Necrophos", "Dazzle", "Spirit Breaker", "Earth Spirit", "Primal Beast", "Puck", "Zeus"]
-lunatix_p3_list = ["Brewmaster", "Visage", "Broodmother", "Razor", "Dazzle", "Bristleback", "Primal Beast", "Axe", "Earthshaker"]
-exit_p5_list = ["Shadow Shaman", "Witch Doctor", "Lion", "Crystal Maiden", "Treant Protector", "Lich", "Warlock", "Venomancer", "Spirit Breaker", "Vengeful Spirit", "Snapfire", "Dazzle", "Bane", "Jakiro", "Ancient Apparition", "Omniknight", "Earthshaker", "Ogre Magi"]
-ice_b_list = list(set(xem_list+GBO_p4_list+thunder_p2_list+lunatix_p3_list+exit_p5_list))
+
+bigs_list = xem_list + leshlagg_list + lejiice_list + insonore_list + cindy_list + cataquack_list
+bigs_list_extended = xem_list_extended + lejiice_list_extended + lejiice_list_extended + cindy_list_extended + cataquack_list_extended
 
 @st.cache_data
 def get_data():
@@ -154,11 +163,11 @@ filter_list_str = st.selectbox(
         "p4",
         "p5",
         "Xem's p1",
-        "Thunder's p2",
-        "Lunatix's p3",
-        "GBO's p4",
-        "Exit's p5",
-        "Icewrack B",
+        "Le Jiice's p2",
+        "Le Shlagg's p3",
+        "Truly Cindy's p4",
+        "Insonore's p5",
+        "Cataquack's p4/p5"
     ]
 )
 filter_list = {
@@ -169,11 +178,13 @@ filter_list = {
     "p4": p4_list,
     "p5": p5_list,
     "Xem's p1": xem_list,
-    "Thunder's p2": thunder_p2_list,
-    "Lunatix's p3": lunatix_p3_list,
-    "GBO's p4": GBO_p4_list,
-    "Exit's p5": exit_p5_list,
-    "Icewrack B": ice_b_list
+    "Xem's p1 extended": xem_list_extended,
+    "Le Jiice's p2": lejiice_list,
+    "Le Shlagg's p3": leshlagg_list,
+    "Truly Cindy's p4": cindy_list,
+    "Insonore's p5": insonore_list,
+    "Cataquack's p4/p5": cataquack_list,
+
 }.get(filter_list_str)
 data = get_data()
 
