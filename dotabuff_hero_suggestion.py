@@ -271,12 +271,12 @@ def get_data_from_dotabuff():
 
     return data
 
-def collect_today_disadvantages():
+def collect_today_disadvantages(file_name):
     # data = get_data_from_dotabuff()
     data = get_data_from_stratz()
 
 
-    with open("dotabuff_data_7-35b_stratz.yaml", "w") as file:
+    with open(f"{file_name}.yaml", "w") as file:
         yaml.dump(data, file)
 
 xem_list = ["Chaos Knight", "Luna", "Spectre", "Muerta", "Lifestealer", "Phantom Lancer", "Faceless Void", "Ursa", "Riki", "Wraith King", "Drow Ranger", "Slark", "Gyrocopter", "Bristleback", "Weaver", "Morphling", "Phantom Assassin", "Lycan"]
@@ -434,7 +434,7 @@ nickname_table = {
 
 
 if __name__ == "__main__":
-    collect_today_disadvantages()
+    collect_today_disadvantages(file_name="dotabuff_data_7-35b_stratz_18-02")
     # suggest_hero(p1="Anti-Mage", p2=None, p3="Dawnbreaker", p4="Mirana", p5="Witch Doctor", filter_list=xem_list)
     # suggest_hero(p1="Chaos Knight", p2="Necrophos", p3=None, p4="Pudge", p5="Grimstroke", filter_list=xem_list)
     

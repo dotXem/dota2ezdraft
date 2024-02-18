@@ -6,7 +6,7 @@ import yaml
 import pandas as pd
 import numpy as np
 
-data_file_name = "dotabuff_data_7-35b_stratz.yaml"
+data_file_name = "dotabuff_data_7-35b_stratz_18-02.yaml"
 
 heroes = ['Witch Doctor', 'Spectre', 'Chaos Knight', 'Wraith King', 'Slardar',
  'Necrophos', 'Sand King', 'Lone Druid', 'Kunkka', 'Treant Protector', 'Jakiro',
@@ -53,7 +53,7 @@ p4_list = ['Witch Doctor', 'Treant Protector', 'Jakiro',
  'Rubick', 'Batrider']
 p5_list = p4_list
 
-xem_list = ["Faceless Void", "Drow Ranger", "Morphling", "Windranger", "Phantom Lancer", "Luna", "Slark", "Spectre", "Ursa", "Juggernaut", "Anti-Mage"]
+xem_list = ["Faceless Void", "Drow Ranger", "Morphling", "Windranger", "Phantom Lancer", "Luna", "Slark", "Spectre", "Ursa", "Juggernaut", "Anti-Mage", "Troll Warlord"]
 xem_list_extended = ["Chaos Knight", "Luna", "Spectre", "Muerta", "Lifestealer", "Phantom Lancer", "Faceless Void", "Ursa", "Riki", "Wraith King", "Drow Ranger", "Slark", "Gyrocopter", "Bristleback", "Weaver", "Morphling", "Phantom Assassin", "Juggernaut", "Lone Druid", "Anti-Mage", "Sven", "Troll Warlord", "Sniper", "Medusa", "Bloodseeker", "Lycan"]
 leshlagg_list = ["Tidehunter", "Centaur Warrunner", "Slardar", "Death Prophet", "Night Stalker", "Sand King", "Axe", "Underlord", "Necrophos", "Bounty Hunter", "Vengeful Spirit", "Beastmaster", "Doom", "Abaddon"]
 leshlagg_list_extended = leshlagg_list + ["Dawnbreaker", "Kunkka", "Legion Commander", "Bristleback", "Timbersaw", "Dark Seer", "Wraith King", "Venomancer"]
@@ -75,9 +75,6 @@ def get_data():
     with open(data_file_name, "r") as file:
         data = yaml.load(file, Loader=yaml.FullLoader)
     return data
-
-def suggest_hero():
-    pass
 
 nickname_table = {
     "WD":'Witch Doctor', 
@@ -189,10 +186,7 @@ filter_list = {
 data = get_data()
 
 
-def suggest_hero(p1=None, p2=None, p3=None, p4=None, p5=None, method="matchup_winrate", filter_list=heroes):
-    with open(data_file_name, "r") as file:
-        data = yaml.load(file, Loader=yaml.FullLoader)
-
+def suggest_hero(data, p1=None, p2=None, p3=None, p4=None, p5=None, method="matchup_winrate", filter_list=heroes):
     enemy_team = [p1,p2,p3,p4,p5] 
     enemy_team = [hero if hero is not None else f"Unknown_{i}" for i, hero in enumerate(enemy_team)]
     filter_list = [hero for hero in filter_list if hero not in enemy_team]
@@ -221,8 +215,6 @@ def suggest_hero(p1=None, p2=None, p3=None, p4=None, p5=None, method="matchup_wi
     df = pd.DataFrame.from_dict(suggestion_data)
     df["max"] = df.max(axis=1)
     df["min"] = df.min(axis=1)
-
-    print(df.head())
     df["matchup_winrate"] = df.mean(axis=1)
     df["global_winrate"] = np.array([winrates[hero]*100 for hero in filter_list  ])
 
@@ -249,11 +241,6 @@ def suggest_hero(p1=None, p2=None, p3=None, p4=None, p5=None, method="matchup_wi
     df["positive_counter_count_condition"] = df["counter_count"] >= 0.0
     df["meta_condition"] = df["matchup_winrate"] >= 50.0
     df["good_matchups_condition"] = df["advantage"] >= 0.0
-
-    print(df["positive_counter_count_condition"].astype(int))
-    print(df["meta_condition"].astype(int))
-    print(df["good_matchups_condition"].astype(int))
-
     df["score"] =  df["positive_counter_count_condition"].astype(int) + df["meta_condition"].astype(int) + df["good_matchups_condition"].astype(int)
 
     df = df.sort_values(["score","matchup_winrate"], ascending=False)
@@ -286,9 +273,9 @@ def suggest_hero(p1=None, p2=None, p3=None, p4=None, p5=None, method="matchup_wi
         use_container_width=True, height=1000
     )
 
-
+data = get_data()
 game_heroes = heroes_str.split(",")
 game_heroes = [nickname_table.get(hero, hero) for hero in game_heroes]
 if game_heroes == [""] or game_heroes is None:
     game_heroes = [None]
-suggest_hero(*game_heroes, filter_list=filter_list )
+suggest_hero(data, *game_heroes, filter_list=filter_list )
