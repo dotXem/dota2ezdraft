@@ -434,7 +434,7 @@ nickname_table = {
 
 
 if __name__ == "__main__":
-    collect_today_disadvantages(file_name="dotabuff_data_7-35b_stratz_18-02")
+    collect_today_disadvantages(file_name="dotabuff_data_7-35d_stratz_9-05")
     # suggest_hero(p1="Anti-Mage", p2=None, p3="Dawnbreaker", p4="Mirana", p5="Witch Doctor", filter_list=xem_list)
     # suggest_hero(p1="Chaos Knight", p2="Necrophos", p3=None, p4="Pudge", p5="Grimstroke", filter_list=xem_list)
     
