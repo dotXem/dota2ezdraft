@@ -213,6 +213,12 @@ def suggest_hero(data, p1=None, p2=None, p3=None, p4=None, p5=None, method="matc
     }
 
     df = pd.DataFrame.from_dict(suggestion_data)
+    
+    st.dataframe(
+        df, 
+        use_container_width=True, height=1000
+    )
+    
     df["matchup_winrate"] = df.mean(axis=1)
     df["max"] = df.max(axis=1)
     df["min"] = df.min(axis=1)
