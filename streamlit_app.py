@@ -213,9 +213,9 @@ def suggest_hero(data, p1=None, p2=None, p3=None, p4=None, p5=None, method="matc
     }
 
     df = pd.DataFrame.from_dict(suggestion_data)
+    df["matchup_winrate"] = df.mean(axis=1)
     df["max"] = df.max(axis=1)
     df["min"] = df.min(axis=1)
-    df["matchup_winrate"] = df.mean(axis=1)
     df["global_winrate"] = np.array([winrates[hero]*100 for hero in filter_list  ])
 
     heroes_adv = []
