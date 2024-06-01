@@ -52,6 +52,7 @@ st.set_option('deprecation.showPyplotGlobalUse', False)
 winrate_data, heroes, p1_list, p2_list, p3_list, p4_list, p5_list, user_heroes, nickname_table = get_data()
 
 heroes_str = st.text_input( "Heroes (separated by commas)")
+heroes_str = heroes_str.lower()
 
 filter_list_str = st.selectbox(
     "Select filter list",
