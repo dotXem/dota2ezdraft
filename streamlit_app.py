@@ -4,6 +4,7 @@ st.set_page_config(layout="wide")
 
 import yaml
 import pandas as pd
+pd.set_option('display.float_format', lambda x: '%.2f' % x)
 import numpy as np
 
 data_file_name = "dotabuff_data_7-36a_stratz_1-06_divine.yaml"
@@ -146,6 +147,18 @@ def suggest_hero(data, p1=None, p2=None, p3=None, p4=None, p5=None, method="matc
         "global_winrate",
         *matchup_adv_cols
     ]]
+    
+    columns = df.columns
+    columns = [col for col in columns if "Unknown" not in col]
+    df = df.loc[:, columns]
+
+    
+    exclude_columns = ["score", "counter_count"]
+    df_formatted = df[df.columns.difference(exclude_columns)].applymap(lambda x: f"{x:.2f}" if isinstance(x, (int, float)) else x)
+    df_final = pd.concat([df[exclude_columns], df_formatted], axis=1)
+    df = df_final.reindex(columns=columns)
+
+
 
     def hero_color_coding(row):
         if row["score"] == 3.0:   
@@ -158,9 +171,10 @@ def suggest_hero(data, p1=None, p2=None, p3=None, p4=None, p5=None, method="matc
             return ['background-color:black'] * len(row)
     df = df.style.apply(hero_color_coding, axis=1)
 
+
     st.dataframe(
         df, 
-        use_container_width=True, height=1000
+        height=1000,
     )
 
 game_heroes = heroes_str.split(",")
@@ -172,6 +186,4 @@ suggest_hero(winrate_data, *game_heroes, filter_list=filter_list )
 #TODO
 # - recollect new data from button
 # - be able to select which dataset to use
-# - hide unknown columns
-# - normalize winrates between -50 and +50
 # - add hero photos
