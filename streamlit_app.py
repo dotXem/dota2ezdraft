@@ -53,22 +53,10 @@ p4_list = ['Witch Doctor', 'Treant Protector', 'Jakiro',
  'Rubick', 'Batrider']
 p5_list = p4_list
 
-xem_list = ["Faceless Void", "Drow Ranger", "Morphling", "Windranger", "Phantom Lancer", "Luna", "Slark", "Spectre", "Ursa", "Juggernaut", "Anti-Mage", "Troll Warlord"]
-xem_list_extended = ["Chaos Knight", "Luna", "Spectre", "Muerta", "Lifestealer", "Phantom Lancer", "Faceless Void", "Ursa", "Riki", "Wraith King", "Drow Ranger", "Slark", "Gyrocopter", "Bristleback", "Weaver", "Morphling", "Phantom Assassin", "Juggernaut", "Lone Druid", "Anti-Mage", "Sven", "Troll Warlord", "Sniper", "Medusa", "Bloodseeker", "Lycan", "Templar Assassin"]
-leshlagg_list = ["Tidehunter", "Centaur Warrunner", "Slardar", "Death Prophet", "Night Stalker", "Sand King", "Axe", "Underlord", "Necrophos", "Bounty Hunter", "Vengeful Spirit", "Beastmaster", "Doom", "Abaddon"]
-leshlagg_list_extended = leshlagg_list + ["Dawnbreaker", "Kunkka", "Legion Commander", "Bristleback", "Timbersaw", "Dark Seer", "Wraith King", "Venomancer"]
-lejiice_list  = ["Puck", "Queen of Pain", "Meepo", "Arc Warden", "Outworld Devourer", "Magnus", "Legion Commander", "Winter Wyvern", "Pugna", "Earthshaker"]
-lejiice_list_extended = lejiice_list + ["Monkey King", "Slardar", "Storm Spirit", "Ember Spirit", "Primal Beast", "Void Spirit"]
-insonore_list = ["Ancient Apparition", "Crystal Maiden", "Disruptor", "Oracle", "Venomancer", "Lich", "Clockwerk", "Io", "Dark Willow", "Nyx Assassin", "Rubick", "Silencer", "Jakiro", "Grimstroke"]
-insonore_list_extended = insonore_list + ["Pugna", "Treant Protector", "Bane", "Snapfire", "Dazzle", "Warlock", "Vengeful Spirit", "Omniknight", "Ogre Magi", "Keeper of the Light", "Witch Doctor", "Winter Wyvern", "Abaddon", "Windranger", "Undying"]
-cindy_list = ["Hoodwink", "Gyrocopter", "Batrider", "Earthshaker", "Winter Wyvern"]
-cindy_list_extended = []
-cataquack_list = []
-cataquack_list_extended = []
 
+with open("user_heroes.yaml", "r") as file:
+    user_heroes = yaml.load(file, Loader=yaml.FullLoader)
 
-bigs_list = xem_list + leshlagg_list + lejiice_list + insonore_list + cindy_list + cataquack_list
-bigs_list_extended = xem_list_extended + lejiice_list_extended + lejiice_list_extended + cindy_list_extended + cataquack_list_extended
 
 @st.cache_data
 def get_data():
@@ -159,14 +147,10 @@ filter_list_str = st.selectbox(
         "p3",
         "p4",
         "p5",
-        "Xem's p1",
-        "Le Jiice's p2",
-        "Le Shlagg's p3",
-        "Truly Cindy's p4",
-        "Insonore's p5",
-        "Cataquack's p4/p5"
+        *user_heroes.keys()
     ]
 )
+
 filter_list = {
     "all heroes": heroes,
     "p1": p1_list,
@@ -174,14 +158,7 @@ filter_list = {
     "p3": p3_list,
     "p4": p4_list,
     "p5": p5_list,
-    "Xem's p1": xem_list,
-    "Xem's p1 extended": xem_list_extended,
-    "Le Jiice's p2": lejiice_list,
-    "Le Shlagg's p3": leshlagg_list,
-    "Truly Cindy's p4": cindy_list,
-    "Insonore's p5": insonore_list,
-    "Cataquack's p4/p5": cataquack_list,
-
+    **user_heroes
 }.get(filter_list_str)
 data = get_data()
 
