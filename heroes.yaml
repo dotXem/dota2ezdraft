@@ -1,0 +1,873 @@
+Abaddon:
+  nicknames:
+  - abaddon
+  roles:
+  - p3
+  - p4
+  - p5
+Alchemist:
+  nicknames:
+  - alchemist
+  roles:
+  - p1
+Ancient Apparition:
+  nicknames:
+  - ancient apparition
+  - AA
+  - aa
+  roles:
+  - p4
+  - p5
+Anti-Mage:
+  nicknames:
+  - anti-mage
+  - AM
+  - am
+  roles:
+  - p1
+Arc Warden:
+  nicknames:
+  - arc warden
+  roles:
+  - p2
+Axe:
+  nicknames:
+  - axe
+  roles:
+  - p3
+Bane:
+  nicknames:
+  - bane
+  roles:
+  - p4
+  - p5
+Batrider:
+  nicknames:
+  - batrider
+  - Bat
+  - bat
+  roles:
+  - p2
+  - p4
+  - p5
+Beastmaster:
+  nicknames:
+  - beastmaster
+  - BM
+  - bm
+  roles:
+  - p3
+Bloodseeker:
+  nicknames:
+  - bloodseeker
+  - BS
+  - bs
+  roles:
+  - p1
+  - p3
+Bounty Hunter:
+  nicknames:
+  - bounty hunter
+  - BH
+  - bh
+  roles:
+  - p3
+  - p4
+  - p5
+Brewmaster:
+  nicknames:
+  - brewmaster
+  - Brew
+  - brew
+  roles:
+  - p3
+Bristleback:
+  nicknames:
+  - bristleback
+  - BB
+  - bb
+  roles:
+  - p1
+  - p2
+  - p3
+Broodmother:
+  nicknames:
+  - broodmother
+  - Brood
+  - brood
+  roles:
+  - p3
+Centaur Warrunner:
+  nicknames:
+  - centaur warrunner
+  - Centaur
+  - centaur
+  roles:
+  - p3
+Chaos Knight:
+  nicknames:
+  - chaos knight
+  - CK
+  - ck
+  roles:
+  - p1
+  - p3
+Chen:
+  nicknames:
+  - chen
+  roles:
+  - p4
+  - p5
+Clinkz:
+  nicknames:
+  - clinkz
+  roles:
+  - p1
+  - p2
+  - p4
+  - p5
+Clockwerk:
+  nicknames:
+  - clockwerk
+  - Clock
+  - clock
+  roles:
+  - p4
+  - p5
+Crystal Maiden:
+  nicknames:
+  - crystal maiden
+  - CM
+  - cm
+  roles:
+  - p4
+  - p5
+Dark Seer:
+  nicknames:
+  - dark seer
+  - DS
+  - ds
+  roles:
+  - p3
+Dark Willow:
+  nicknames:
+  - dark willow
+  - Willow
+  - willow
+  roles:
+  - p1
+  - p4
+  - p5
+Dawnbreaker:
+  nicknames:
+  - dawnbreaker
+  - DB
+  - db
+  roles:
+  - p4
+  - p5
+Dazzle:
+  nicknames:
+  - dazzle
+  roles:
+  - p2
+  - p4
+  - p5
+Death Prophet:
+  nicknames:
+  - death prophet
+  - DP
+  - dp
+  roles:
+  - p2
+  - p3
+Disruptor:
+  nicknames:
+  - disruptor
+  roles:
+  - p4
+  - p5
+Doom:
+  nicknames:
+  - doom
+  roles:
+  - p3
+Dragon Knight:
+  nicknames:
+  - dragon knight
+  - DK
+  - dk
+  roles:
+  - p2
+  - p3
+Drow Ranger:
+  nicknames:
+  - drow ranger
+  - Drow
+  - drow
+  roles:
+  - p1
+Earth Spirit:
+  nicknames:
+  - earth spirit
+  roles:
+  - p2
+  - p4
+  - p5
+Earthshaker:
+  nicknames:
+  - earthshaker
+  - ES
+  - es
+  roles:
+  - p2
+  - p3
+  - p4
+  - p5
+Elder Titan:
+  nicknames:
+  - elder titan
+  - ET
+  - et
+  roles:
+  - p4
+  - p5
+Ember Spirit:
+  nicknames:
+  - ember spirit
+  roles:
+  - p2
+Enchantress:
+  nicknames:
+  - enchantress
+  - Ench
+  - ench
+  roles:
+  - p4
+  - p5
+Enigma:
+  nicknames:
+  - enigma
+  roles:
+  - p3
+  - p4
+  - p5
+Faceless Void:
+  nicknames:
+  - faceless void
+  - FV
+  - fv
+  roles:
+  - p1
+Grimstroke:
+  nicknames:
+  - grimstroke
+  - Grim
+  - grim
+  roles:
+  - p4
+  - p5
+Gyrocopter:
+  nicknames:
+  - gyrocopter
+  - Gyro
+  - gyro
+  roles:
+  - p1
+Hoodwink:
+  nicknames:
+  - hoodwink
+  roles:
+  - p4
+  - p5
+Huskar:
+  nicknames:
+  - huskar
+  roles:
+  - p2
+Invoker:
+  nicknames:
+  - invoker
+  roles:
+  - p2
+  - p4
+  - p5
+Io:
+  nicknames:
+  - io
+  roles:
+  - p4
+  - p5
+Jakiro:
+  nicknames:
+  - jakiro
+  roles:
+  - p4
+  - p5
+Juggernaut:
+  nicknames:
+  - juggernaut
+  - Jugg
+  - jugg
+  roles:
+  - p1
+Keeper of the Light:
+  nicknames:
+  - keeper of the light
+  - KOTL
+  - kotl
+  roles:
+  - p2
+  - p4
+  - p5
+Kunkka:
+  nicknames:
+  - kunkka
+  roles:
+  - p2
+  - p3
+Legion Commander:
+  nicknames:
+  - legion commander
+  - LC
+  - lc
+  roles:
+  - p3
+Leshrac:
+  nicknames:
+  - leshrac
+  - Lesh
+  - lesh
+  roles:
+  - p2
+Lich:
+  nicknames:
+  - lich
+  roles:
+  - p4
+  - p5
+Lifestealer:
+  nicknames:
+  - lifestealer
+  - LS
+  - ls
+  roles:
+  - p1
+Lina:
+  nicknames:
+  - lina
+  roles:
+  - p2
+Lion:
+  nicknames:
+  - lion
+  roles:
+  - p4
+  - p5
+Lone Druid:
+  nicknames:
+  - lone druid
+  - LD
+  - ld
+  roles:
+  - p1
+  - p2
+  - p3
+Luna:
+  nicknames:
+  - luna
+  roles:
+  - p1
+Lycan:
+  nicknames:
+  - lycan
+  roles: []
+Magnus:
+  nicknames:
+  - magnus
+  roles:
+  - p1
+  - p2
+  - p3
+  - p4
+  - p5
+Marci:
+  nicknames:
+  - marci
+  roles:
+  - p2
+  - p3
+  - p4
+  - p5
+Mars:
+  nicknames:
+  - mars
+  roles:
+  - p3
+Medusa:
+  nicknames:
+  - medusa
+  roles:
+  - p1
+Meepo:
+  nicknames:
+  - meepo
+  roles:
+  - p2
+Mirana:
+  nicknames:
+  - mirana
+  roles:
+  - p4
+  - p5
+Monkey King:
+  nicknames:
+  - monkey king
+  - MK
+  - mk
+  roles:
+  - p1
+  - p2
+  - p4
+  - p5
+Morphling:
+  nicknames:
+  - morphling
+  - Morph
+  - morph
+  roles:
+  - p1
+Muerta:
+  nicknames:
+  - muerta
+  roles:
+  - p1
+  - p4
+  - p5
+Naga Siren:
+  nicknames:
+  - naga siren
+  - Naga
+  - naga
+  roles:
+  - p1
+Nature's Prophet:
+  nicknames:
+  - nature's prophet
+  - NP
+  - np
+  roles:
+  - p4
+  - p5
+Necrophos:
+  nicknames:
+  - necrophos
+  - Necro
+  - necro
+  roles:
+  - p2
+  - p3
+Night Stalker:
+  nicknames:
+  - night stalker
+  - NS
+  - ns
+  roles:
+  - p3
+Nyx Assassin:
+  nicknames:
+  - nyx assassin
+  - Nyx
+  - nyx
+  roles:
+  - p2
+  - p4
+  - p5
+Ogre Magi:
+  nicknames:
+  - ogre magi
+  - Ogre
+  - ogre
+  roles:
+  - p2
+  - p4
+  - p5
+Omniknight:
+  nicknames:
+  - omniknight
+  - Omni
+  - omni
+  roles:
+  - p3
+  - p4
+  - p5
+Oracle:
+  nicknames:
+  - oracle
+  roles:
+  - p4
+  - p5
+Outworld Devourer:
+  nicknames:
+  - outworld devourer
+  - OD
+  - od
+  roles:
+  - p2
+Pangolier:
+  nicknames:
+  - pangolier
+  - Pango
+  - pango
+  roles:
+  - p2
+  - p3
+Phantom Assassin:
+  nicknames:
+  - phantom assassin
+  - PA
+  - pa
+  roles:
+  - p1
+Phantom Lancer:
+  nicknames:
+  - phantom lancer
+  - PL
+  - pl
+  roles:
+  - p1
+Phoenix:
+  nicknames:
+  - phoenix
+  roles:
+  - p4
+  - p5
+Primal Beast:
+  nicknames:
+  - primal beast
+  - PB
+  - pb
+  roles:
+  - p2
+  - p3
+Puck:
+  nicknames:
+  - puck
+  roles:
+  - p2
+Pudge:
+  nicknames:
+  - pudge
+  roles:
+  - p1
+  - p2
+  - p3
+  - p4
+  - p5
+Pugna:
+  nicknames:
+  - pugna
+  roles:
+  - p2
+  - p4
+  - p5
+Queen of Pain:
+  nicknames:
+  - queen of pain
+  - QoP
+  - qop
+  roles:
+  - p2
+Razor:
+  nicknames:
+  - razor
+  roles:
+  - p1
+  - p2
+  - p3
+Riki:
+  nicknames:
+  - riki
+  roles:
+  - p1
+  - p2
+Rubick:
+  nicknames:
+  - rubick
+  roles:
+  - p2
+  - p4
+  - p5
+Sand King:
+  nicknames:
+  - sand king
+  - SK
+  - sk
+  roles:
+  - p3
+Shadow Demon:
+  nicknames:
+  - shadow demon
+  - SD
+  - sd
+  roles:
+  - p4
+  - p5
+Shadow Fiend:
+  nicknames:
+  - shadow fiend
+  - SF
+  - sf
+  roles:
+  - p1
+  - p2
+Shadow Shaman:
+  nicknames:
+  - shadow shaman
+  - SS
+  - ss
+  roles:
+  - p4
+  - p5
+Silencer:
+  nicknames:
+  - silencer
+  roles:
+  - p4
+  - p5
+Skywrath Mage:
+  nicknames:
+  - skywrath mage
+  - Sky
+  - sky
+  roles:
+  - p4
+  - p5
+Slardar:
+  nicknames:
+  - slardar
+  roles:
+  - p2
+  - p3
+Slark:
+  nicknames:
+  - slark
+  roles:
+  - p1
+Snapfire:
+  nicknames:
+  - snapfire
+  - Snap
+  - snap
+  roles:
+  - p2
+  - p4
+  - p5
+Sniper:
+  nicknames:
+  - sniper
+  roles:
+  - p1
+  - p2
+  - p4
+  - p5
+Spectre:
+  nicknames:
+  - spectre
+  roles:
+  - p1
+Spirit Breaker:
+  nicknames:
+  - spirit breaker
+  - SB
+  - sb
+  roles:
+  - p2
+  - p3
+  - p4
+  - p5
+Storm Spirit:
+  nicknames:
+  - storm spirit
+  roles:
+  - p2
+Sven:
+  nicknames:
+  - sven
+  roles:
+  - p1
+Techies:
+  nicknames:
+  - techies
+  roles:
+  - p4
+  - p5
+Templar Assassin:
+  nicknames:
+  - templar assassin
+  - TA
+  - ta
+  roles:
+  - p1
+  - p2
+Terrorblade:
+  nicknames:
+  - terrorblade
+  - TB
+  - tb
+  roles:
+  - p1
+Tidehunter:
+  nicknames:
+  - tidehunter
+  - Tide
+  - tide
+  roles:
+  - p3
+Timbersaw:
+  nicknames:
+  - timbersaw
+  - Timber
+  - timber
+  roles:
+  - p2
+  - p3
+Tinker:
+  nicknames:
+  - tinker
+  roles:
+  - p2
+Tiny:
+  nicknames:
+  - tiny
+  roles:
+  - p2
+  - p3
+Treant Protector:
+  nicknames:
+  - treant protector
+  - Treant
+  - treant
+  roles:
+  - p4
+  - p5
+Troll Warlord:
+  nicknames:
+  - troll warlord
+  - Troll
+  - troll
+  roles:
+  - p1
+Tusk:
+  nicknames:
+  - tusk
+  roles:
+  - p2
+  - p3
+  - p4
+  - p5
+Underlord:
+  nicknames:
+  - underlord
+  roles:
+  - p3
+Undying:
+  nicknames:
+  - undying
+  - UD
+  - ud
+  roles:
+  - p4
+  - p5
+Ursa:
+  nicknames:
+  - ursa
+  roles:
+  - p1
+Vengeful Spirit:
+  nicknames:
+  - vengeful spirit
+  - Venge
+  - venge
+  roles:
+  - p4
+  - p5
+Venomancer:
+  nicknames:
+  - venomancer
+  - Veno
+  - veno
+  roles:
+  - p3
+  - p4
+  - p5
+Viper:
+  nicknames:
+  - viper
+  roles:
+  - p2
+  - p3
+Visage:
+  nicknames:
+  - visage
+  roles:
+  - p2
+  - p3
+Void Spirit:
+  nicknames:
+  - void spirit
+  roles:
+  - p2
+Warlock:
+  nicknames:
+  - warlock
+  roles:
+  - p4
+  - p5
+Weaver:
+  nicknames:
+  - weaver
+  roles:
+  - p1
+  - p3
+  - p4
+  - p5
+Windranger:
+  nicknames:
+  - windranger
+  - Wind
+  - wind
+  roles:
+  - p1
+  - p2
+  - p4
+  - p5
+Winter Wyvern:
+  nicknames:
+  - winter wyvern
+  - WW
+  - ww
+  roles:
+  - p4
+  - p5
+Witch Doctor:
+  nicknames:
+  - witch doctor
+  - WD
+  - wd
+  roles:
+  - p4
+  - p5
+Wraith King:
+  nicknames:
+  - wraith king
+  - WK
+  - wk
+  roles:
+  - p1
+  - p3
+Zeus:
+  nicknames:
+  - zeus
+  roles:
+  - p2

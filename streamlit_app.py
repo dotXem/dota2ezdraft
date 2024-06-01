@@ -8,133 +8,47 @@ import numpy as np
 
 data_file_name = "dotabuff_data_7-36a_stratz_1-06_divine.yaml"
 
-heroes = ['Witch Doctor', 'Spectre', 'Chaos Knight', 'Wraith King', 'Slardar',
- 'Necrophos', 'Sand King', 'Lone Druid', 'Kunkka', 'Treant Protector', 'Jakiro',
- 'Arc Warden', 'Phantom Lancer', 'Warlock', 'Meepo', 'Silencer', 'Abaddon',
- 'Spirit Breaker', 'Zeus', 'Outworld Devourer', 'Ancient Apparition',
- 'Shadow Shaman', 'Riki', 'Oracle', 'Lich', 'Muerta', 'Ogre Magi',
- 'Centaur Warrunner', 'Nyx Assassin', 'Troll Warlord', 'Venomancer', 'Undying',
- 'Axe', 'Clinkz', 'Naga Siren', 'Night Stalker', 'Visage', 'Vengeful Spirit',
- 'Anti-Mage', 'Viper', 'Lifestealer', 'Grimstroke', 'Legion Commander',
- 'Sniper', 'Bristleback', 'Skywrath Mage', 'Elder Titan', 'Io', 'Shadow Fiend',
- 'Bounty Hunter', "Nature's Prophet", 'Weaver', 'Dazzle', 'Crystal Maiden',
- 'Huskar', 'Omniknight', 'Tinker', 'Luna', 'Earthshaker', 'Slark', 'Underlord',
- 'Drow Ranger', 'Bloodseeker', 'Chen', 'Dark Seer', 'Primal Beast',
- 'Queen of Pain', 'Bane', 'Pugna', 'Brewmaster', 'Invoker', 'Pudge',
- 'Juggernaut', 'Dawnbreaker', 'Disruptor', 'Void Spirit', 'Faceless Void',
- 'Hoodwink', 'Marci', 'Razor', 'Winter Wyvern', 'Phoenix', 'Dark Willow',
- 'Clockwerk', 'Phantom Assassin', 'Earth Spirit', 'Mirana', 'Dragon Knight',
- 'Lycan', 'Ursa', 'Medusa', 'Death Prophet', 'Lina', 'Tidehunter', 'Gyrocopter',
- 'Windranger', 'Alchemist', 'Sven', 'Techies', 'Enigma', 'Puck', 'Storm Spirit',
- 'Templar Assassin', 'Leshrac', 'Shadow Demon', 'Morphling', 'Lion', 'Magnus',
- 'Tusk', 'Monkey King', 'Keeper of the Light', 'Mars', 'Snapfire',
- 'Broodmother', 'Doom', 'Beastmaster', 'Tiny', 'Timbersaw', 'Enchantress',
- 'Rubick', 'Pangolier', 'Ember Spirit', 'Terrorblade', 'Batrider']
- 
-p1_list = ["Spectre", "Faceless Void","Weaver","Luna","Chaos Knight", "Muerta","Morphling", "Lifestealer", "Templar Assassin", "Slark", "Naga Siren", "Wraith King", "Sven", "Phantom Assassin", "Terrorblade", "Phantom Lancer", "Monkey King", "Bristleback", "Ursa", "Bloodseeker", "Troll Warlord", "Anti-Mage","Alchemist", "Lone Druid","Dark Willow", "Drow Ranger", "Gyrocopter", "Juggernaut", "Pudge", "Razor", "Riki", "Magnus","Shadow Fiend", "Sniper","Clinkz","Windranger","Medusa"]
-p2_list = ["Kunkka", "Invoker", "Earth Spirit", "Pangolier", "Primal Beast", "Necrophos", "Puck", "Lina", "Queen of Pain", "Dazzle", "Outworld Devourer", "Zeus", "Storm Spirit", "Huskar", "Earthshaker", "Templar Assassin", "Magnus", "Void Spirit", "Keeper of the Light", "Tinker", "Lone Druid", "Ember Spirit", "Shadow Fiend", "Monkey King", "Arc Warden", "Pugna", "Tiny", "Bristleback", "Slardar", "Clinkz", "Windranger", "Leshrac", "Batrider", "Ogre Magi", "Meepo", "Marci", "Razor", "Spirit Breaker", "Sniper", "Viper", "Riki", "Death Prophet", "Visage", "Nyx Assassin", "Pudge", "Timbersaw", "Rubick", "Tusk", "Snapfire", "Dragon Knight"] 
-p3_list = ['Chaos Knight', 'Wraith King', 'Slardar', 'Necrophos', 'Sand King', 'Lone Druid', 'Kunkka', 'Abaddon', 'Spirit Breaker', 'Centaur Warrunner', 'Venomancer',  'Axe', 'Night Stalker', 'Visage', 'Viper',  'Legion Commander', 'Bristleback', 'Bounty Hunter', 'Weaver','Omniknight', 'Earthshaker', 'Underlord','Bloodseeker', 'Dark Seer', 'Primal Beast','Brewmaster', 'Pudge','Marci', 'Razor', 'Dragon Knight','Death Prophet', 'Tidehunter', 'Enigma', 'Magnus', 'Tusk',  'Mars',  'Broodmother', 'Doom', 'Beastmaster', 'Tiny', 'Timbersaw', 'Pangolier']
-p4_list = ['Witch Doctor', 'Treant Protector', 'Jakiro',
- 'Warlock', 'Silencer', 'Abaddon',
- 'Spirit Breaker', 'Ancient Apparition',
- 'Shadow Shaman', 'Oracle', 'Lich', 'Muerta', 'Ogre Magi',
- 'Nyx Assassin', 'Venomancer', 'Undying',
- 'Clinkz', 'Vengeful Spirit',
- 'Grimstroke', 
- 'Sniper', 'Skywrath Mage', 'Elder Titan', 'Io',
- 'Bounty Hunter', "Nature's Prophet", 'Weaver', 'Dazzle', 'Crystal Maiden',
- 'Omniknight', 'Earthshaker', 'Chen', 'Bane', 'Pugna', 'Invoker', 'Pudge',
- 'Dawnbreaker', 'Disruptor', 
- 'Hoodwink', 'Marci', 'Winter Wyvern', 'Phoenix', 'Dark Willow',
- 'Clockwerk', 'Earth Spirit', 'Mirana',  
- 'Windranger', 'Techies', 'Enigma', 'Shadow Demon', 'Lion', 'Magnus',
- 'Tusk', 'Monkey King', 'Keeper of the Light', 'Snapfire',
- 'Enchantress',
- 'Rubick', 'Batrider']
-p5_list = p4_list
-
-
-with open("user_heroes.yaml", "r") as file:
-    user_heroes = yaml.load(file, Loader=yaml.FullLoader)
 
 
 @st.cache_data
 def get_data():
-    with open(data_file_name, "r") as file:
-        data = yaml.load(file, Loader=yaml.FullLoader)
-    return data
+    with open("heroes.yaml", "r") as file:
+        heroes_data = yaml.load(file, Loader=yaml.FullLoader)
 
-nickname_table = {
-    "WD":'Witch Doctor', 
-    "CK":'Chaos Knight', 
-    "WK": 'Wraith King', 
-    "Necro": 'Necrophos', 
-    "SK": 'Sand King', 
-    "LD": 'Lone Druid', 
-    "Treant": 'Treant Protector',
-    "PL": 'Phantom Lancer', 
-    "SB": 'Spirit Breaker', 
-    "OD":'Outworld Devourer', 
-    "AA": 'Ancient Apparition',
-    "SS": 'Shadow Shaman',
-    "Ogre": 'Ogre Magi',
-    "Centaur": 'Centaur Warrunner', 
-    "Nyx": 'Nyx Assassin', 
-    "Troll": 'Troll Warlord', 
-    "Veno": 'Venomancer', 
-    "UD": 'Undying',
-    "Naga": 'Naga Siren', 
-    "NS": 'Night Stalker', 
-    "Venge": 'Vengeful Spirit',
-    "AM": 'Anti-Mage', 
-    "LS": 'Lifestealer', 
-    "Grim": 'Grimstroke', 
-    "LC": 'Legion Commander',
-    "BB": 'Bristleback', 
-    "Sky": 'Skywrath Mage', 
-    "ET": 'Elder Titan', 
-    "SF": 'Shadow Fiend',
-    "BH": 'Bounty Hunter', 
-    "NP": "Nature's Prophet", 
-    "CM": 'Crystal Maiden',
-    "Omni": 'Omniknight', 
-    "ES": 'Earthshaker',
-    "Drow": 'Drow Ranger', 
-    "BS": 'Bloodseeker', 
-    "DS": 'Dark Seer', 
-    "PB": 'Primal Beast',
-    "QoP": 'Queen of Pain', 
-    "Brew": 'Brewmaster', 
-    "Jugg": 'Juggernaut', 
-    "DB": 'Dawnbreaker', 
-    "FV": 'Faceless Void',
-    "WW": 'Winter Wyvern', 
-    "Willow": "Dark Willow",
-    "Clock": 'Clockwerk', 
-    "PA":'Phantom Assassin', 
-    "DK": 'Dragon Knight',
-    "DP": 'Death Prophet', 
-    "Tide": 'Tidehunter', 
-    "Gyro": 'Gyrocopter',
-    "Wind": 'Windranger', 
-    "TA": 'Templar Assassin', 
-    "Lesh": 'Leshrac', 
-    "SD": 'Shadow Demon', 
-    "Morph": 'Morphling', 
-    "MK": 'Monkey King', 
-    "KOTL": 'Keeper of the Light', 
-    "Snap": "Snapfire",
-    "Brood": 'Broodmother', 
-    "BM":'Beastmaster', 
-    "Timber": 'Timbersaw', 
-    "Ench":'Enchantress',
-    "Pango": 'Pangolier',
-    "TB": 'Terrorblade', 
-    "Bat": 'Batrider'
-}
+    heroes = list(heroes_data.keys())
+
+
+    def pos_heroes_list(pos):
+        return [
+            hero
+            for hero, hero_data in heroes_data.items()
+            if pos in hero_data["roles"]
+        ]
+    
+    p1_list = pos_heroes_list("p1")
+    p2_list = pos_heroes_list("p2")
+    p3_list = pos_heroes_list("p3")
+    p4_list = pos_heroes_list("p4")
+    p5_list = pos_heroes_list("p5")
+
+
+    with open("user_heroes.yaml", "r") as file:
+        user_heroes = yaml.load(file, Loader=yaml.FullLoader)
+
+    with open(data_file_name, "r") as file:
+        winrate_data = yaml.load(file, Loader=yaml.FullLoader)
+
+    nickname_table = {}
+    for hero, hero_data in heroes_data.items():
+        for nickname in hero_data["nicknames"]:
+            nickname_table[nickname] = hero
+
+    return winrate_data, heroes, p1_list, p2_list, p3_list, p4_list, p5_list, user_heroes, nickname_table
 
 st.title('Dota2 - EZDraft')
 st.set_option('deprecation.showPyplotGlobalUse', False)
+
+winrate_data, heroes, p1_list, p2_list, p3_list, p4_list, p5_list, user_heroes, nickname_table = get_data()
 
 heroes_str = st.text_input( "Heroes (separated by commas)")
 
@@ -160,7 +74,6 @@ filter_list = {
     "p5": p5_list,
     **user_heroes
 }.get(filter_list_str)
-data = get_data()
 
 
 def suggest_hero(data, p1=None, p2=None, p3=None, p4=None, p5=None, method="matchup_winrate", filter_list=heroes):
@@ -250,14 +163,15 @@ def suggest_hero(data, p1=None, p2=None, p3=None, p4=None, p5=None, method="matc
         use_container_width=True, height=1000
     )
 
-data = get_data()
 game_heroes = heroes_str.split(",")
 game_heroes = [nickname_table.get(hero, hero) for hero in game_heroes]
 if game_heroes == [""] or game_heroes is None:
     game_heroes = [None]
-suggest_hero(data, *game_heroes, filter_list=filter_list )
+suggest_hero(winrate_data, *game_heroes, filter_list=filter_list )
 
 #TODO
-# - handle also lower case heroes
 # - recollect new data from button
 # - be able to select which dataset to use
+# - hide unknown columns
+# - normalize winrates between -50 and +50
+# - add hero photos
