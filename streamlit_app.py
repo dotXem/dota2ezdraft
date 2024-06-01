@@ -6,7 +6,7 @@ import yaml
 import pandas as pd
 import numpy as np
 
-data_file_name = "dotabuff_data_7-35d_stratz_9-05_divine.yaml"
+data_file_name = "dotabuff_data_7-36a_stratz_1-06_divine.yaml"
 
 heroes = ['Witch Doctor', 'Spectre', 'Chaos Knight', 'Wraith King', 'Slardar',
  'Necrophos', 'Sand King', 'Lone Druid', 'Kunkka', 'Treant Protector', 'Jakiro',
@@ -54,7 +54,7 @@ p4_list = ['Witch Doctor', 'Treant Protector', 'Jakiro',
 p5_list = p4_list
 
 xem_list = ["Faceless Void", "Drow Ranger", "Morphling", "Windranger", "Phantom Lancer", "Luna", "Slark", "Spectre", "Ursa", "Juggernaut", "Anti-Mage", "Troll Warlord"]
-xem_list_extended = ["Chaos Knight", "Luna", "Spectre", "Muerta", "Lifestealer", "Phantom Lancer", "Faceless Void", "Ursa", "Riki", "Wraith King", "Drow Ranger", "Slark", "Gyrocopter", "Bristleback", "Weaver", "Morphling", "Phantom Assassin", "Juggernaut", "Lone Druid", "Anti-Mage", "Sven", "Troll Warlord", "Sniper", "Medusa", "Bloodseeker", "Lycan"]
+xem_list_extended = ["Chaos Knight", "Luna", "Spectre", "Muerta", "Lifestealer", "Phantom Lancer", "Faceless Void", "Ursa", "Riki", "Wraith King", "Drow Ranger", "Slark", "Gyrocopter", "Bristleback", "Weaver", "Morphling", "Phantom Assassin", "Juggernaut", "Lone Druid", "Anti-Mage", "Sven", "Troll Warlord", "Sniper", "Medusa", "Bloodseeker", "Lycan", "Templar Assassin"]
 leshlagg_list = ["Tidehunter", "Centaur Warrunner", "Slardar", "Death Prophet", "Night Stalker", "Sand King", "Axe", "Underlord", "Necrophos", "Bounty Hunter", "Vengeful Spirit", "Beastmaster", "Doom", "Abaddon"]
 leshlagg_list_extended = leshlagg_list + ["Dawnbreaker", "Kunkka", "Legion Commander", "Bristleback", "Timbersaw", "Dark Seer", "Wraith King", "Venomancer"]
 lejiice_list  = ["Puck", "Queen of Pain", "Meepo", "Arc Warden", "Outworld Devourer", "Magnus", "Legion Commander", "Winter Wyvern", "Pugna", "Earthshaker"]
@@ -279,3 +279,8 @@ game_heroes = [nickname_table.get(hero, hero) for hero in game_heroes]
 if game_heroes == [""] or game_heroes is None:
     game_heroes = [None]
 suggest_hero(data, *game_heroes, filter_list=filter_list )
+
+#TODO
+# - handle also lower case heroes
+# - recollect new data from button
+# - be able to select which dataset to use
