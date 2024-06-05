@@ -7,7 +7,7 @@ import pandas as pd
 pd.set_option('display.float_format', lambda x: '%.2f' % x)
 import numpy as np
 
-data_file_name = "dotabuff_data_7-36a_stratz_1-06_divine.yaml"
+data_file_name = "dotabuff_data_7-36a_stratz_05-06.yaml"
 
 
 

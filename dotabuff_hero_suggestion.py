@@ -65,10 +65,11 @@ def get_data_from_stratz():
         id:hero for hero, id in stratz_hero_to_id.items()
     }
 
+            # heroVsHeroMatchup(heroId: {hero_id}, bracketBasicIds: DIVINE_IMMORTAL) {
     querry = """
     {
         heroStats {
-            heroVsHeroMatchup(heroId: {hero_id}, bracketBasicIds: DIVINE_IMMORTAL) {
+            heroVsHeroMatchup(heroId: {hero_id}) {
                 disadvantage {
                     heroId
                     vs {
@@ -434,7 +435,7 @@ nickname_table = {
 
 
 if __name__ == "__main__":
-    collect_today_disadvantages(file_name="dotabuff_data_7-36a_stratz_1-06_divine")
+    collect_today_disadvantages(file_name="dotabuff_data_7-36a_stratz_05-06")
     # suggest_hero(p1="Anti-Mage", p2=None, p3="Dawnbreaker", p4="Mirana", p5="Witch Doctor", filter_list=xem_list)
     # suggest_hero(p1="Chaos Knight", p2="Necrophos", p3=None, p4="Pudge", p5="Grimstroke", filter_list=xem_list)
     
