@@ -5,9 +5,9 @@ st.set_page_config(layout="wide")
 import yaml
 import pandas as pd
 import numpy as np
-import os
-from dotabuff_hero_suggestion import collect_today_disadvantages
-import datetime
+# import os
+# from dotabuff_hero_suggestion import collect_today_disadvantages
+# import datetime
 from st_files_connection import FilesConnection
 
 conn = st.connection('gcs', type=FilesConnection)
@@ -40,6 +40,7 @@ def get_data(data_file_name):
 
     winrate_data = conn.read("heroes-ezdraft/7-36c_2024-07-14.yaml", input_format="text", ttl=600)
     winrate_data = yaml.safe_load(winrate_data)
+
 
     nickname_table = {}
     for hero, hero_data in heroes_data.items():
