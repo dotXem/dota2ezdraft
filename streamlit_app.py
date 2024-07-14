@@ -4,15 +4,17 @@ st.set_page_config(layout="wide")
 
 import yaml
 import pandas as pd
-pd.set_option('display.float_format', lambda x: '%.2f' % x)
 import numpy as np
+import os
+from dotabuff_hero_suggestion import collect_today_disadvantages
+import datetime
+from st_files_connection import FilesConnection
 
-data_file_name = "dotabuff_data_7-36a_stratz_05-06.yaml"
-
+conn = st.connection('gcs', type=FilesConnection)
 
 
 @st.cache_data
-def get_data():
+def get_data(data_file_name):
     with open("heroes.yaml", "r") as file:
         heroes_data = yaml.load(file, Loader=yaml.FullLoader)
 
@@ -36,8 +38,8 @@ def get_data():
     with open("user_heroes.yaml", "r") as file:
         user_heroes = yaml.load(file, Loader=yaml.FullLoader)
 
-    with open(data_file_name, "r") as file:
-        winrate_data = yaml.load(file, Loader=yaml.FullLoader)
+    winrate_data = conn.read("heroes-ezdraft/7-36c_2024-07-14.yaml", input_format="text", ttl=600)
+    winrate_data = yaml.safe_load(winrate_data)
 
     nickname_table = {}
     for hero, hero_data in heroes_data.items():
@@ -47,9 +49,26 @@ def get_data():
     return winrate_data, heroes, p1_list, p2_list, p3_list, p4_list, p5_list, user_heroes, nickname_table
 
 st.title('Dota2 - EZDraft')
-st.set_option('deprecation.showPyplotGlobalUse', False)
+# st.set_option('deprecation.showPyplotGlobalUse', False)
 
-winrate_data, heroes, p1_list, p2_list, p3_list, p4_list, p5_list, user_heroes, nickname_table = get_data()
+# update_data_button = st.button("Update Data")
+# if update_data_button:
+#     collect_today_disadvantages("_" + str(datetime.datetime.now().date()))
+#     st.success("New data collected!")
+
+# available_datasets = os.listdir("data")
+# data_to_use = st.selectbox("Which data to use?", ["latest"] + available_datasets, index=0)
+# if data_to_use == "latest":
+#     available_datasets_dates = [
+#         dataset_name[:-5].split("_")[1]
+#         for dataset_name in available_datasets
+#     ] 
+#     data_to_use = available_datasets[available_datasets_dates.index(max(available_datasets_dates))]
+    
+data_to_use = ""
+
+
+winrate_data, heroes, p1_list, p2_list, p3_list, p4_list, p5_list, user_heroes, nickname_table = get_data(data_to_use)
 
 heroes_str = st.text_input( "Heroes (separated by commas)")
 heroes_str = heroes_str.lower()
@@ -155,11 +174,9 @@ def suggest_hero(data, p1=None, p2=None, p3=None, p4=None, p5=None, method="matc
 
     
     exclude_columns = ["score", "counter_count"]
-    df_formatted = df[df.columns.difference(exclude_columns)].applymap(lambda x: f"{x:.2f}" if isinstance(x, (int, float)) else x)
+    df_formatted = df[df.columns.difference(exclude_columns)]
     df_final = pd.concat([df[exclude_columns], df_formatted], axis=1)
     df = df_final.reindex(columns=columns)
-
-
 
     def hero_color_coding(row):
         if row["score"] == 3.0:   
@@ -170,8 +187,11 @@ def suggest_hero(data, p1=None, p2=None, p3=None, p4=None, p5=None, method="matc
             return ['background-color:#D53801'] * len(row)
         else:
             return ['background-color:black'] * len(row)
-    df = df.style.apply(hero_color_coding, axis=1)
-
+        
+    df = df.style.apply(hero_color_coding, axis=1).format(
+        subset=df.columns.difference(["score", "counter_count"]),
+        formatter="{:.2f}"
+    )
 
     st.dataframe(
         df, 

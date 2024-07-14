@@ -142,7 +142,7 @@ def get_data_from_stratz():
             "winrate": result["vs"][0]["winRateHeroId1"]
         }
 
-        time.sleep(1)
+        # time.sleep(1)
 
     return data
 
@@ -435,7 +435,7 @@ nickname_table = {
 
 
 if __name__ == "__main__":
-    collect_today_disadvantages(file_name="dotabuff_data_7-36a_stratz_05-06")
+    collect_today_disadvantages(file_name="dotabuff_data_7-36c_stratz_07-14")
     # suggest_hero(p1="Anti-Mage", p2=None, p3="Dawnbreaker", p4="Mirana", p5="Witch Doctor", filter_list=xem_list)
     # suggest_hero(p1="Chaos Knight", p2="Necrophos", p3=None, p4="Pudge", p5="Grimstroke", filter_list=xem_list)
     
