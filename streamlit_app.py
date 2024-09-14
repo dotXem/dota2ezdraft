@@ -5,16 +5,13 @@ st.set_page_config(layout="wide")
 import yaml
 import pandas as pd
 import numpy as np
-# import os
-# from dotabuff_hero_suggestion import collect_today_disadvantages
-# import datetime
+from get_data_from_stratz import get_data_from_stratz, HEROES
 from st_files_connection import FilesConnection
-
-conn = st.connection('gcs', type=FilesConnection)
-
+import asyncio
+import datetime
 
 @st.cache_data
-def get_data(data_file_name):
+def get_data(data_file):
     with open("heroes.yaml", "r") as file:
         heroes_data = yaml.load(file, Loader=yaml.FullLoader)
 
@@ -38,7 +35,7 @@ def get_data(data_file_name):
     with open("user_heroes.yaml", "r") as file:
         user_heroes = yaml.load(file, Loader=yaml.FullLoader)
 
-    winrate_data = conn.read("heroes-ezdraft/7-36c_2024-07-14.yaml", input_format="text", ttl=600)
+    winrate_data = conn.read(data_file, input_format="text", ttl=600)
     winrate_data = yaml.safe_load(winrate_data)
 
 
@@ -49,27 +46,47 @@ def get_data(data_file_name):
 
     return winrate_data, heroes, p1_list, p2_list, p3_list, p4_list, p5_list, user_heroes, nickname_table
 
-st.title('Dota2 - EZDraft')
-# st.set_option('deprecation.showPyplotGlobalUse', False)
+conn = st.connection('gcs', type=FilesConnection)
 
-# update_data_button = st.button("Update Data")
-# if update_data_button:
-#     collect_today_disadvantages("_" + str(datetime.datetime.now().date()))
-#     st.success("New data collected!")
+update_data_button = st.sidebar.button("Update Data")
+if update_data_button:
+    st.sidebar.info("Fetching new data...")
+    data = asyncio.run(get_data_from_stratz())
+    nb_fetched_heroes = len(data.keys())
+    success = nb_fetched_heroes == len(HEROES)
 
-# available_datasets = os.listdir("data")
-# data_to_use = st.selectbox("Which data to use?", ["latest"] + available_datasets, index=0)
-# if data_to_use == "latest":
-#     available_datasets_dates = [
-#         dataset_name[:-5].split("_")[1]
-#         for dataset_name in available_datasets
-#     ] 
-#     data_to_use = available_datasets[available_datasets_dates.index(max(available_datasets_dates))]
+    if success:
+        yaml_str = yaml.dump(data)
+        date = str(datetime.datetime.now().date())
+        file_path = f'heroes-ezdraft/{date}.yaml'
+        
+        try:
+            with conn.fs.open(file_path, 'w') as f:
+                f.write(yaml_str)
+            st.sidebar.success("New data collected!")
+        except Exception as e:
+            st.sidebar.error(f"An error occurred: {e}")
+    else:
+        st.sidebar.error(f"Failed fetching new data, only {nb_fetched_heroes} heroes collected. Try again in 1 minute.")
+
+data_file_list = conn.fs.ls("heroes-ezdraft")
+data_file_list = sorted(data_file_list, reverse=True)
+
+data_file_select = st.sidebar.selectbox(
+    "Select data",
+    data_file_list,
+    index=0
+)
+if data_file_select == "latest":
+    data_file = data_file_list[-1]
+else:
+    data_file = data_file_select
     
-data_to_use = ""
+st.sidebar.info(f"Using {data_file.split('/')[1][:-5]} data.")
 
+st.title('Dota2 - EZDraft')
 
-winrate_data, heroes, p1_list, p2_list, p3_list, p4_list, p5_list, user_heroes, nickname_table = get_data(data_to_use)
+winrate_data, heroes, p1_list, p2_list, p3_list, p4_list, p5_list, user_heroes, nickname_table = get_data(data_file)
 
 heroes_str = st.text_input( "Heroes (separated by commas)")
 heroes_str = heroes_str.lower()
