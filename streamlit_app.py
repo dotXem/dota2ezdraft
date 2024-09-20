@@ -91,6 +91,8 @@ winrate_data, heroes, p1_list, p2_list, p3_list, p4_list, p5_list, user_heroes, 
 heroes_str = st.text_input( "Heroes (separated by commas)")
 heroes_str = heroes_str.lower()
 
+use_synergy = st.toggle("Synergy", value=False)
+
 filter_list_str = st.selectbox(
     "Select filter list",
     [
@@ -115,10 +117,14 @@ filter_list = {
 }.get(filter_list_str)
 
 
-def suggest_hero(data, p1=None, p2=None, p3=None, p4=None, p5=None, method="matchup_winrate", filter_list=heroes):
+def suggest_hero(data, p1=None, p2=None, p3=None, p4=None, p5=None, use_synergy=False, filter_list=heroes):
     enemy_team = [p1,p2,p3,p4,p5] 
     enemy_team = [hero if hero is not None else f"Unknown_{i}" for i, hero in enumerate(enemy_team)]
     filter_list = [hero for hero in filter_list if hero not in enemy_team]
+
+    matchup_or_synergy = "synergy" if use_synergy else "matchup"
+    winrate_col = f"{matchup_or_synergy}_winrate"
+    disadvantage_col = f"{matchup_or_synergy}_disadvantage"
 
     winrates = {
         hero:hero_data["winrate"] for hero, hero_data in data.items()    
@@ -127,7 +133,6 @@ def suggest_hero(data, p1=None, p2=None, p3=None, p4=None, p5=None, method="matc
         hero:hero_data["matchup_winrate"] for hero, hero_data in data.items()
         if hero in filter_list
     }   
-
 
     suggestion_data = {
        enemy_hero:  {
@@ -142,15 +147,16 @@ def suggest_hero(data, p1=None, p2=None, p3=None, p4=None, p5=None, method="matc
     }
 
     df = pd.DataFrame.from_dict(suggestion_data)
-    df["matchup_winrate"] = df.mean(axis=1)
+    df[winrate_col] = df.mean(axis=1)
     df["max"] = df.max(axis=1)
     df["min"] = df.min(axis=1)
     df["global_winrate"] = np.array([winrates[hero]*100 for hero in filter_list  ])
 
     heroes_adv = []
+    synergy_multiplier = 1 if use_synergy else -1
     for hero in enemy_team:
         if "Unknown" not in hero:
-            hero_adv = [-data[hero]["matchup_disadvantage"][suggested_hero]   for suggested_hero in df.index]
+            hero_adv = [synergy_multiplier * data[hero][disadvantage_col][suggested_hero]   for suggested_hero in df.index]
         else:
             hero_adv = [0.0] * len(df.index)
         heroes_adv.append(hero_adv) 
@@ -159,7 +165,7 @@ def suggest_hero(data, p1=None, p2=None, p3=None, p4=None, p5=None, method="matc
         data=np.array(heroes_adv).transpose(),
         columns=matchup_adv_cols,
         index=df.index
-    )    
+    ) 
 
     df = pd.concat([df, matchup_df],axis=1)
     df["advantage"] = df.loc[:, matchup_adv_cols].mean(axis=1)
@@ -168,19 +174,19 @@ def suggest_hero(data, p1=None, p2=None, p3=None, p4=None, p5=None, method="matc
     df["nb_countered"] = (df.loc[:,matchup_adv_cols] >= 2.3972399999999987).sum(axis=1)
     df["counter_count"] = df["nb_countered"] - df["nb_counters"] 
     df["positive_counter_count_condition"] = df["counter_count"] >= 0.0
-    df["meta_condition"] = df["matchup_winrate"] >= 50.0
+    df["meta_condition"] = df[winrate_col] >= 50.0
     df["good_matchups_condition"] = df["advantage"] >= 0.0
     df["score"] =  df["positive_counter_count_condition"].astype(int) + df["meta_condition"].astype(int) + df["good_matchups_condition"].astype(int)
 
-    df = df.sort_values(["score","matchup_winrate"], ascending=False)
-    
+    df = df.sort_values(["score",winrate_col], ascending=False)
+
     pd.set_option('display.max_columns', None)
     pd.set_option('display.width', 1000)
     
     df = df.loc[:,[
         "score",
         "advantage",
-        "matchup_winrate",
+        winrate_col,
         "counter_count",
         "global_winrate",
         *matchup_adv_cols
@@ -194,7 +200,13 @@ def suggest_hero(data, p1=None, p2=None, p3=None, p4=None, p5=None, method="matc
     exclude_columns = ["score", "counter_count"]
     df_formatted = df[df.columns.difference(exclude_columns)]
     df_final = pd.concat([df[exclude_columns], df_formatted], axis=1)
+
     df = df_final.reindex(columns=columns)
+
+    df = df.rename(columns={
+        hero_col: hero_col.split("_")[0]
+        for hero_col in matchup_adv_cols
+    })
 
     def hero_color_coding(row):
         if row["score"] == 3.0:   
@@ -220,7 +232,7 @@ game_heroes = heroes_str.split(",")
 game_heroes = [nickname_table.get(hero, hero) for hero in game_heroes]
 if game_heroes == [""] or game_heroes is None:
     game_heroes = [None]
-suggest_hero(winrate_data, *game_heroes, filter_list=filter_list )
+suggest_hero(winrate_data, *game_heroes, use_synergy=use_synergy, filter_list=filter_list )
 
 #TODO
 # - recollect new data from button
