@@ -84,10 +84,11 @@ async def get_data_from_stratz():
 
     hero_ids = [stratz_hero_to_id[hero] for hero in HEROES]
 
+    # heroVsHeroMatchup(heroId: {hero_id}, bracketBasicIds: DIVINE_IMMORTAL) {
     query = """
     {
         heroStats {
-            heroVsHeroMatchup(heroId: {hero_id}, bracketBasicIds: DIVINE_IMMORTAL) {
+            heroVsHeroMatchup(heroId: {hero_id}) {
                 disadvantage {
                     vs {
                         heroId1
