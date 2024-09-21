@@ -9,6 +9,7 @@ from get_data_from_stratz import get_data_from_stratz, HEROES
 from st_files_connection import FilesConnection
 import asyncio
 import datetime
+from hero_suggestion import *
 
 @st.cache_data
 def get_data(data_file):
@@ -44,7 +45,13 @@ def get_data(data_file):
         for nickname in hero_data["nicknames"]:
             nickname_table[nickname] = hero
 
-    return winrate_data, heroes, p1_list, p2_list, p3_list, p4_list, p5_list, user_heroes, nickname_table
+    winrates_series, enemy_winrates_df, ally_winrates_df = create_winrate_enemy_synergy_dfs(winrate_data)
+    counter_scores_df = compute_counter_scores(winrates_series, enemy_winrates_df)
+    synergy_scores_df = compute_synergy_scores(winrates_series, ally_winrates_df)
+    exceptionnal_counters_df = identify_exceptional_interactions(counter_scores_df, lower_quantile=0.10, upper_quantile=0.90)
+    exceptionnal_synergy_df = identify_exceptional_interactions(synergy_scores_df, lower_quantile=0.10, upper_quantile=0.90)
+
+    return winrates_series, counter_scores_df, synergy_scores_df, exceptionnal_counters_df, exceptionnal_synergy_df, heroes, p1_list, p2_list, p3_list, p4_list, p5_list, user_heroes, nickname_table
 
 conn = st.connection('gcs', type=FilesConnection)
 
@@ -86,12 +93,23 @@ st.sidebar.info(f"Using {data_file.split('/')[1][:-5]} data.")
 
 st.title('Dota2 - EZDraft')
 
-winrate_data, heroes, p1_list, p2_list, p3_list, p4_list, p5_list, user_heroes, nickname_table = get_data(data_file)
+(
+    winrates_series, 
+    counter_scores_df, 
+    synergy_scores_df, 
+    exceptionnal_counters_df, 
+    exceptionnal_synergy_df, 
+    heroes, 
+    p1_list, p2_list, p3_list, p4_list, p5_list, 
+    user_heroes, 
+    nickname_table 
+) = get_data(data_file)
 
-heroes_str = st.text_input( "Heroes (separated by commas)")
-heroes_str = heroes_str.lower()
+enemy_heroes_str = st.text_input( "Enemy heroes (separated by commas)")
+enemy_heroes_str = enemy_heroes_str.lower()
 
-use_synergy = st.toggle("Synergy", value=False)
+ally_heroes_str = st.text_input( "Ally heroes (separated by commas)")
+ally_heroes_str = ally_heroes_str.lower()
 
 filter_list_str = st.selectbox(
     "Select filter list",
@@ -116,125 +134,70 @@ filter_list = {
     **user_heroes
 }.get(filter_list_str)
 
-
-def suggest_hero(data, p1=None, p2=None, p3=None, p4=None, p5=None, use_synergy=False, filter_list=heroes):
-    enemy_team = [p1,p2,p3,p4,p5] 
-    enemy_team = [hero if hero is not None else f"Unknown_{i}" for i, hero in enumerate(enemy_team)]
-    filter_list = [hero for hero in filter_list if hero not in enemy_team]
-
-    matchup_or_synergy = "synergy" if use_synergy else "matchup"
-    winrate_col = f"{matchup_or_synergy}_winrate"
-    disadvantage_col = f"{matchup_or_synergy}_disadvantage"
-
-    winrates = {
-        hero:hero_data["winrate"] for hero, hero_data in data.items()    
-    }
-    matchup_winrates = {
-        hero:hero_data["matchup_winrate"] for hero, hero_data in data.items()
-        if hero in filter_list
-    }   
-
-    suggestion_data = {
-       enemy_hero:  {
-
-            suggested_hero: matchup_winrates[suggested_hero][enemy_hero] * 100 if "Unknown" not in enemy_hero else winrates[suggested_hero] * 100
-            for suggested_hero in filter_list
-            if enemy_hero != suggested_hero
-             
-        }
-        for enemy_hero in enemy_team
-          
-    }
-
-    df = pd.DataFrame.from_dict(suggestion_data)
-    df[winrate_col] = df.mean(axis=1)
-    df["max"] = df.max(axis=1)
-    df["min"] = df.min(axis=1)
-    df["global_winrate"] = np.array([winrates[hero]*100 for hero in filter_list  ])
-
-    heroes_adv = []
-    synergy_multiplier = 1 if use_synergy else -1
-    for hero in enemy_team:
-        if "Unknown" not in hero:
-            hero_adv = [synergy_multiplier * data[hero][disadvantage_col][suggested_hero]   for suggested_hero in df.index]
-        else:
-            hero_adv = [0.0] * len(df.index)
-        heroes_adv.append(hero_adv) 
-    matchup_adv_cols = [hero + "_matchup_adv" for hero in enemy_team]
-    matchup_df = pd.DataFrame(
-        data=np.array(heroes_adv).transpose(),
-        columns=matchup_adv_cols,
-        index=df.index
-    ) 
-
-    df = pd.concat([df, matchup_df],axis=1)
-    df["advantage"] = df.loc[:, matchup_adv_cols].mean(axis=1)
-
-    df["nb_counters"] = (df.loc[:,matchup_adv_cols] <= -2.21212).sum(axis=1) #len(np.where(np.array(heroes_adv) <=  -2.21212)[0])
-    df["nb_countered"] = (df.loc[:,matchup_adv_cols] >= 2.3972399999999987).sum(axis=1)
-    df["counter_count"] = df["nb_countered"] - df["nb_counters"] 
-    df["positive_counter_count_condition"] = df["counter_count"] >= 0.0
-    df["meta_condition"] = df[winrate_col] >= 50.0
-    df["good_matchups_condition"] = df["advantage"] >= 0.0
-    df["score"] =  df["positive_counter_count_condition"].astype(int) + df["meta_condition"].astype(int) + df["good_matchups_condition"].astype(int)
-
-    df = df.sort_values(["score",winrate_col], ascending=False)
-
+def display_hero_suggestions(winrates_series, counter_scores_df, synergy_scores_df, enemy_heroes, ally_heroes, filter_list=heroes):
+    suggestions_df = suggest_heroes_from_ally_and_enemy(
+        winrates_series, 
+        counter_scores_df, 
+        synergy_scores_df, 
+        exceptionnal_counters_df, 
+        exceptionnal_synergy_df,
+        enemy_heroes, 
+        ally_heroes,
+    )
+    
+    filter_list = [hero for hero in filter_list if hero not in enemy_heroes + ally_heroes]
+    suggestions_df = suggestions_df.loc[filter_list]
+    suggestions_df = suggestions_df.sort_values(["relevance", "score"], ascending=False)
+    
     pd.set_option('display.max_columns', None)
     pd.set_option('display.width', 1000)
     
-    df = df.loc[:,[
+    suggestions_df = suggestions_df.loc[:,[
+        "relevance",
         "score",
-        "advantage",
-        winrate_col,
-        "counter_count",
-        "global_winrate",
-        *matchup_adv_cols
+        "winrate",
+        "impact",
+        "score_enemy",
+        *enemy_heroes,
+        "score_ally",
+        *ally_heroes
     ]]
+
+    all_winrate_columns = suggestions_df.columns.difference(["relevance", "impact"])
+    suggestions_df.loc[:, all_winrate_columns] = suggestions_df.loc[:, all_winrate_columns] * 100
     
-    columns = df.columns
-    columns = [col for col in columns if "Unknown" not in col]
-    df = df.loc[:, columns]
-
-    
-    exclude_columns = ["score", "counter_count"]
-    df_formatted = df[df.columns.difference(exclude_columns)]
-    df_final = pd.concat([df[exclude_columns], df_formatted], axis=1)
-
-    df = df_final.reindex(columns=columns)
-
-    df = df.rename(columns={
-        hero_col: hero_col.split("_")[0]
-        for hero_col in matchup_adv_cols
-    })
-
     def hero_color_coding(row):
-        if row["score"] == 3.0:   
+        if row["relevance"] == 3.0:   
             return ['background-color:#029E73'] * len(row)
-        elif row["score"] == 2.0:
+        elif row["relevance"] == 2.0:
             return ['background-color:#DE8F05'] * len(row)
-        elif row["score"] == 1.0:
+        elif row["relevance"] == 1.0:
             return ['background-color:#D53801'] * len(row)
         else:
             return ['background-color:black'] * len(row)
         
-    df = df.style.apply(hero_color_coding, axis=1).format(
-        subset=df.columns.difference(["score", "counter_count"]),
+    suggestions_df = suggestions_df.style.apply(hero_color_coding, axis=1).format(
+        subset=all_winrate_columns,
         formatter="{:.2f}"
     )
 
     st.dataframe(
-        df, 
+        suggestions_df, 
         height=1000,
     )
 
-game_heroes = heroes_str.split(",")
-game_heroes = [nickname_table.get(hero, hero) for hero in game_heroes]
-if game_heroes == [""] or game_heroes is None:
-    game_heroes = [None]
-suggest_hero(winrate_data, *game_heroes, use_synergy=use_synergy, filter_list=filter_list )
+enemy_heroes = enemy_heroes_str.split(",")
+enemy_heroes = [nickname_table.get(hero, hero) for hero in enemy_heroes]
+if enemy_heroes == [""] or enemy_heroes is None:
+    enemy_heroes = []
+
+ally_heroes = ally_heroes_str.split(",")
+ally_heroes = [nickname_table.get(hero, hero) for hero in ally_heroes]
+if ally_heroes == [""] or ally_heroes is None:
+    ally_heroes = []
+
+display_hero_suggestions(winrates_series, counter_scores_df, synergy_scores_df, enemy_heroes, ally_heroes, filter_list=filter_list)
 
 #TODO
-# - recollect new data from button
-# - be able to select which dataset to use
 # - add hero photos
+# - use bracket winrates for the is_meta filter
