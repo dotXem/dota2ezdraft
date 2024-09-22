@@ -591,6 +591,12 @@ Riki:
   roles:
   - p1
   - p2
+Ringmaster:
+  nicknames:
+  - ringmaster
+  roles:
+  - p4
+  - p5
 Rubick:
   nicknames:
   - rubick
@@ -689,6 +695,7 @@ Spirit Breaker:
 Storm Spirit:
   nicknames:
   - storm spirit
+  - storm
   roles:
   - p2
 Sven:
