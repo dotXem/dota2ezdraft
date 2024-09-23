@@ -239,23 +239,23 @@ if __name__ == "__main__":
     with open("2024-09-21.yaml") as f:
         data = yaml.load(f, Loader=yaml.FullLoader)
 
-    winrates_series, enemy_winrates_df, ally_winrates_df = create_winrate_enemy_synergy_dfs(data)
-    counter_scores_df = compute_counter_scores(winrates_series, enemy_winrates_df)
-    synergy_scores_df = compute_synergy_scores(winrates_series, ally_winrates_df)
+    winrates_per_bracket, enemy_winrates_df, ally_winrates_df = create_winrate_enemy_synergy_dfs(data)
+    counter_scores_df = compute_counter_scores(winrates_per_bracket, enemy_winrates_df)
+    synergy_scores_df = compute_synergy_scores(winrates_per_bracket, ally_winrates_df)
     exceptionnal_synergy_df = identify_exceptional_interactions(synergy_scores_df, lower_quantile=0.10, upper_quantile=0.90)
     exceptionnal_counters_df = identify_exceptional_interactions(counter_scores_df, lower_quantile=0.10, upper_quantile=0.90)
 
 
-    enemy_suggestions_df = suggest_heroes(winrates_series, counter_scores_df, selected_heroes=["Faceless Void", "Techies"])
+    enemy_suggestions_df = suggest_heroes(winrates_per_bracket, counter_scores_df, selected_heroes=["Faceless Void", "Techies"])
     enemy_suggestions_df.sort_values("score", ascending=False).head(10)
 
-    ally_suggestions_df = suggest_heroes(winrates_series, synergy_scores_df, selected_heroes=["Grimstroke", "Lich"])
+    ally_suggestions_df = suggest_heroes(winrates_per_bracket, synergy_scores_df, selected_heroes=["Grimstroke", "Lich"])
     ally_suggestions_df.sort_values("score", ascending=False).head(10)
 
     enemy_heroes = ["Faceless Void", "Techies"]
     ally_heroes = ["Grimstroke", "Lich"]
     suggestions_df = suggest_heroes_from_ally_and_enemy(
-        winrates_series, 
+        winrates_per_bracket, 
         counter_scores_df, 
         synergy_scores_df, 
         enemy_heroes=enemy_heroes, 

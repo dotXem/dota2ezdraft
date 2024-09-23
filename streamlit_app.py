@@ -5,7 +5,7 @@ st.set_page_config(layout="wide")
 import yaml
 import pandas as pd
 import numpy as np
-from get_data_from_stratz import get_data_from_stratz, HEROES
+from get_data_from_stratz import get_data_from_stratz, HEROES, BRACKETS
 from st_files_connection import FilesConnection
 import asyncio
 import datetime
@@ -18,47 +18,51 @@ def get_data(data_file):
 
     heroes = list(heroes_data.keys())
 
-
-    def pos_heroes_list(pos):
-        return [
-            hero
-            for hero, hero_data in heroes_data.items()
-            if pos in hero_data["roles"]
-        ]
-    
-    p1_list = pos_heroes_list("p1")
-    p2_list = pos_heroes_list("p2")
-    p3_list = pos_heroes_list("p3")
-    p4_list = pos_heroes_list("p4")
-    p5_list = pos_heroes_list("p5")
-
-
-    with open("user_heroes.yaml", "r") as file:
-        user_heroes = yaml.load(file, Loader=yaml.FullLoader)
-
-    winrate_data = conn.read(data_file, input_format="text", ttl=600)
-    winrate_data = yaml.safe_load(winrate_data)
-
-
     nickname_table = {}
     for hero, hero_data in heroes_data.items():
         for nickname in hero_data["nicknames"]:
             nickname_table[nickname] = hero
 
-    winrates_series, enemy_winrates_df, ally_winrates_df = create_winrate_enemy_synergy_dfs(winrate_data)
+    with open("user_heroes.yaml", "r") as file:
+        user_heroes = yaml.load(file, Loader=yaml.FullLoader)
+
+    stratz_data = conn.read(data_file, input_format="text", ttl=600)
+    stratz_data = yaml.safe_load(stratz_data)
+
+    winrates_series, enemy_winrates_df, ally_winrates_df = create_winrate_enemy_synergy_dfs(stratz_data)
     counter_scores_df = compute_counter_scores(winrates_series, enemy_winrates_df)
     synergy_scores_df = compute_synergy_scores(winrates_series, ally_winrates_df)
     exceptionnal_counters_df = identify_exceptional_interactions(counter_scores_df, lower_quantile=0.10, upper_quantile=0.90)
     exceptionnal_synergy_df = identify_exceptional_interactions(synergy_scores_df, lower_quantile=0.10, upper_quantile=0.90)
 
-    return winrates_series, counter_scores_df, synergy_scores_df, exceptionnal_counters_df, exceptionnal_synergy_df, heroes, p1_list, p2_list, p3_list, p4_list, p5_list, user_heroes, nickname_table
+    heroes_per_position = {
+        f"POSITION_{i}": []
+        for i in range(1, 6)
+    }
+    for hero, hero_data in stratz_data.items():
+        for position in hero_data["positions"]:
+            heroes_per_position[position].append(hero)
+
+    winrates_per_bracket = {
+        bracket: {}
+        for bracket in stratz_data["Lion"]["winrate_brackets"].keys()
+    }
+    for hero_name, hero_data in stratz_data.items():
+        for bracket, winrate in hero_data["winrate_brackets"].items():
+            winrates_per_bracket[bracket][hero_name] = winrate
+    winrates_per_bracket = {
+        bracket: pd.Series(winrates)
+        for bracket, winrates in winrates_per_bracket.items()
+    }
+
+    return winrates_per_bracket, counter_scores_df, synergy_scores_df, exceptionnal_counters_df, exceptionnal_synergy_df, heroes, *heroes_per_position.values(), user_heroes, nickname_table
 
 conn = st.connection('gcs', type=FilesConnection)
 
 update_data_button = st.sidebar.button("Update Data")
 if update_data_button:
     st.sidebar.info("Fetching new data...")
-    data = asyncio.run(get_data_from_stratz())
+    data = get_data_from_stratz()
     nb_fetched_heroes = len(data.keys())
     success = nb_fetched_heroes == len(HEROES)
 
@@ -91,10 +95,10 @@ else:
     
 st.sidebar.info(f"Using {data_file.split('/')[1][:-5]} data.")
 
-st.title('Dota2 - EZDraft')
+
 
 (
-    winrates_series, 
+    winrates_per_bracket, 
     counter_scores_df, 
     synergy_scores_df, 
     exceptionnal_counters_df, 
@@ -104,6 +108,18 @@ st.title('Dota2 - EZDraft')
     user_heroes, 
     nickname_table 
 ) = get_data(data_file)
+
+bracketst_str = [
+    "[" + ",".join(bracket) + "]"
+    for bracket in BRACKETS
+]
+
+bracket = st.sidebar.selectbox(
+    "Select bracket data",
+    bracketst_str,
+)
+
+st.title('Dota2 - EZDraft')
 
 enemy_heroes_str = st.text_input( "Enemy heroes (separated by commas)")
 enemy_heroes_str = enemy_heroes_str.lower()
@@ -196,7 +212,7 @@ ally_heroes = [nickname_table.get(hero, hero) for hero in ally_heroes]
 if ally_heroes == [""] or ally_heroes is None:
     ally_heroes = []
 
-display_hero_suggestions(winrates_series, counter_scores_df, synergy_scores_df, enemy_heroes, ally_heroes, filter_list=filter_list)
+display_hero_suggestions(winrates_per_bracket[bracket], counter_scores_df, synergy_scores_df, enemy_heroes, ally_heroes, filter_list=filter_list)
 
 #TODO
 # - add hero photos
