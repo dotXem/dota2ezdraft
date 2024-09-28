@@ -10,6 +10,43 @@ from st_files_connection import FilesConnection
 import asyncio
 import datetime
 from hero_suggestion import *
+import streamlit_authenticator as stauth
+
+# hashed_passwords = stauth.Hasher(["test"]).generate()
+# print(hashed_passwords)
+
+st.sidebar.header("User")
+with open('users.yaml') as file:
+    user_config = yaml.load(file, Loader=yaml.SafeLoader)
+
+@st.cache_data
+def get_users_config():
+    with open('users.yaml') as file:
+        config = yaml.load(file, Loader=yaml.SafeLoader)
+    return config
+
+user_config = get_users_config()
+
+authenticator = stauth.Authenticate(
+    user_config['credentials'],
+    user_config['cookie']['name'],
+    user_config['cookie']['key'],
+    user_config['cookie']['expiry_days'],
+    user_config['preauthorized']
+)
+name, authentication_status, username = authenticator.login('sidebar')
+
+if authentication_status:
+    st.sidebar.write(f'Connected as *{name}*')    
+    authenticator.logout("Logout", 'sidebar')
+elif authentication_status == False:
+    st.sidebar.error('Username/password is incorrect')
+elif authentication_status == None:
+    st.sidebar.warning('Enter your username and password to access custom heroes lists')
+
+user_heroes = user_config["heroes_lists"].get(username, {})
+
+st.sidebar.header("Data")
 
 @st.cache_data
 def get_data(data_file):
@@ -22,9 +59,6 @@ def get_data(data_file):
     for hero, hero_data in heroes_data.items():
         for nickname in hero_data["nicknames"]:
             nickname_table[nickname] = hero
-
-    with open("user_heroes.yaml", "r") as file:
-        user_heroes = yaml.load(file, Loader=yaml.FullLoader)
 
     stratz_data = conn.read(data_file, input_format="text", ttl=600)
     stratz_data = yaml.safe_load(stratz_data)
@@ -55,7 +89,7 @@ def get_data(data_file):
         for bracket, winrates in winrates_per_bracket.items()
     }
 
-    return winrates_per_bracket, counter_scores_df, synergy_scores_df, exceptionnal_counters_df, exceptionnal_synergy_df, heroes, *heroes_per_position.values(), user_heroes, nickname_table
+    return winrates_per_bracket, counter_scores_df, synergy_scores_df, exceptionnal_counters_df, exceptionnal_synergy_df, heroes, *heroes_per_position.values(), nickname_table
 
 conn = st.connection('gcs', type=FilesConnection)
 
@@ -69,7 +103,7 @@ if update_data_button:
     if success:
         yaml_str = yaml.dump(data)
         date = str(datetime.datetime.now().date())
-        file_path = f'heroes-ezdraft/{date}.yaml'
+        file_path = f'heroes-ezdraft/data/{date}.yaml'
         
         try:
             with conn.fs.open(file_path, 'w') as f:
@@ -80,7 +114,7 @@ if update_data_button:
     else:
         st.sidebar.error(f"Failed fetching new data, only {nb_fetched_heroes} heroes collected. Try again in 1 minute.")
 
-data_file_list = conn.fs.ls("heroes-ezdraft")
+data_file_list = conn.fs.ls("heroes-ezdraft/data/")
 data_file_list = sorted(data_file_list, reverse=True)
 
 data_file_select = st.sidebar.selectbox(
@@ -93,7 +127,7 @@ if data_file_select == "latest":
 else:
     data_file = data_file_select
     
-st.sidebar.info(f"Using {data_file.split('/')[1][:-5]} data.")
+st.sidebar.info(f"Using {data_file.split('/')[2][:-5]} data.")
 
 
 
@@ -105,7 +139,6 @@ st.sidebar.info(f"Using {data_file.split('/')[1][:-5]} data.")
     exceptionnal_synergy_df, 
     heroes, 
     p1_list, p2_list, p3_list, p4_list, p5_list, 
-    user_heroes, 
     nickname_table 
 ) = get_data(data_file)
 

@@ -1,0 +1,30 @@
+credentials:
+  usernames:
+    xem:
+      name: Xem'
+      password: $2b$12$kq7t6NBW0N8pF0nSHR35B.Vkml8k7QlDzH6c4.l0cpNeIsG7Uw43e
+    nft:
+      name: NFT
+      password: $2b$12$VEJq9bEpyi1HLFAZr7dZGevZDyQjM5022J5KsMO4N0ZYASLmLC7WK
+cookie:
+  expiry_days: 30
+  key: random_signature_key # Must be string
+  name: random_cookie_name
+preauthorized:
+  emails:    
+heroes_lists:
+  xem: &xem
+    Xem P1: ["Windranger", "Luna", "Ursa", "Lina", "Dragon Knight", "Mirana", "Weaver", "Faceless Void", "Morphling", "Bristleback", "Wraith King", "Spectre", "Medusa"]
+    Xem P1 extended: ["Chaos Knight", "Luna", "Spectre", "Muerta", "Lifestealer", "Phantom Lancer", "Faceless Void", "Ursa", "Riki", "Wraith King", "Drow Ranger", "Slark", "Gyrocopter", "Bristleback", "Weaver", "Morphling", "Phantom Assassin", "Juggernaut", "Lone Druid", "Anti-Mage", "Sven", "Troll Warlord", "Sniper", "Medusa", "Bloodseeker", "Lycan", "Templar Assassin", "Windranger", "Dragon Knight"]
+  nft:
+    <<: *xem
+    NFT main: ["Windranger", "Luna", "Ursa", "Lina", "Dragon Knight", "Mirana", "Weaver", "Faceless Void", "Morphling", "Bristleback", "Wraith King", "Spectre", "Medusa", "Invoker", "Outworld Devourer", "Void Spirit", "Puck", "Queen of Pain", "Kunkka", "Night Stalker", "Centaur Warrunner", "Primal Beast", "Sand King", "Dark Seer", "Doom", "Underlord", "Timbersaw", "Vengeful Spirit", "Dark Willow", "Sniper", "Hoodwink", "Spirit Breaker", "Jakiro", "Clockwerk", "Witch Doctor", "Earthshaker", "Dawnbreaker", "Undying", "Snapfire", "Ancient Apparition", "Lion", "Zeus", "Treant Protector", "Omniknight", "Shadow Shaman", "Lich", "Crystal Maiden", "Grimstroke"]
+    NVM P2: ["Invoker", "Outworld Devourer", "Void Spirit", "Lina", "Puck", "Queen of Pain"]
+    NVM P2 extended: ["Invoker", "Outworld Devourer", "Void Spirit", "Lina", "Puck", "Queen of Pain", "Rubick", "Zeus", "Windranger", "Morphling", "Kunkka"]
+    Super P3: ["Kunkka", "Night Stalker", "Centaur Warrunner", "Primal Beast", "Sand King", "Dark Seer", "Doom", "Underlord", "Timbersaw", "Vengeful Spirit"]
+    Super P3 extended: ["Kunkka", "Night Stalker", "Centaur Warrunner", "Primal Beast", "Sand King", "Dark Seer", "Doom", "Underlord", "Timbersaw", "Vengeful Spirit", "Slardar", "Earthshaker", "Razor", "Winter Wyvern", "Necrophos"]
+    Impossible P4: ["Dark Willow", "Sniper", "Hoodwink", "Spirit Breaker", "Jakiro", "Clockwerk", "Witch Doctor", "Earthshaker", "Dawnbreaker", "Undying", "Snapfire", "Ancient Apparition", "Lion", "Vengeful Spirit", "Zeus"]
+    Impossible P4 extended: ["Dark Willow", "Sniper", "Hoodwink", "Spirit Breaker", "Jakiro", "Clockwerk", "Witch Doctor", "Earthshaker", "Dawnbreaker", "Undying", "Snapfire", "Ancient Apparition", "Lion", "Vengeful Spirit", "Zeus", "Monkey King", "Gyrocopter", "Windranger", "Skywrath Mage", "Ogre Magi", "Marci", "Crystal Maiden", "Clinkz", "Nyx Assassin", "Witch Doctor", "Tusk", "Omniknight", "Alchemist", "Winter Wyvern", "Warlock", "Venomancer", "Techies"]
+    EXIT P5: ["Treant Protector", "Omniknight", "Shadow Shaman", "Lich", "Witch Doctor", "Jakiro", "Lion", "Crystal Maiden", "Grimstroke"]
+    EXIT P5 extended: ["Treant Protector", "Omniknight", "Shadow Shaman", "Lich", "Witch Doctor", "Jakiro", "Lion", "Crystal Maiden", "Grimstroke", "Pugna", "Ringmaster", "Ogre Magi", "Warlock", "Ancient Apparition"]
+    
