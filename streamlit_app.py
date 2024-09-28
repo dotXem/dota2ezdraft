@@ -1,6 +1,6 @@
 import streamlit as st
  
-st.set_page_config(layout="wide")
+st.set_page_config(layout="wide", page_title="EZDraft - Dota 2", page_icon="⚔️")
 
 import yaml
 import pandas as pd
