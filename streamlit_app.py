@@ -31,8 +31,7 @@ authenticator = stauth.Authenticate(
     user_config['credentials'],
     user_config['cookie']['name'],
     user_config['cookie']['key'],
-    user_config['cookie']['expiry_days'],
-    user_config['preauthorized']
+    user_config['cookie']['expiry_days']
 )
 name, authentication_status, username = authenticator.login('sidebar')
 
