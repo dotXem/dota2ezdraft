@@ -35,6 +35,7 @@ authenticator = stauth.Authenticate(
 )
 name, authentication_status, username = authenticator.login('sidebar')
 
+
 if authentication_status:
     st.sidebar.write(f'Connected as *{name}*')    
     authenticator.logout("Logout", 'sidebar')
