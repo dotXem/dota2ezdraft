@@ -12,8 +12,8 @@ STRATZ_API_URL = "https://api.stratz.com/graphql"
 STRATZ_API_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJTdWJqZWN0IjoiYTEyYTYzYjUtOWI2My00OThkLThlZjEtOGNhZmJiNDliZDY1IiwiU3RlYW1JZCI6IjM2MzM5Mjk3IiwibmJmIjoxNzAxNTExNDU2LCJleHAiOjE3MzMwNDc0NTYsImlhdCI6MTcwMTUxMTQ1NiwiaXNzIjoiaHR0cHM6Ly9hcGkuc3RyYXR6LmNvbSJ9.Nub3VZ58_I-jSZkfca6WI8TVNZbeDmNhjwgxK9xuyGM"
 
 # reduce threshold because we don't have all tokens available in stratz dashboard
-MAX_CALLS_PER_SECOND = 10 #20
-MAX_CALLS_PER_MINUTE = 200 #250
+MAX_CALLS_PER_SECOND = 5 #20
+MAX_CALLS_PER_MINUTE = 100 #250
 
 with open("stratz_hero_to_id.yaml", "r") as file:
     STRATZ_HERO_TO_ID = yaml.load(file, Loader=yaml.FullLoader)
