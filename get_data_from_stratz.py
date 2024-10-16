@@ -26,16 +26,16 @@ BRACKETS = [
     ["CRUSADER", "ARCHON"],
     ["GUARDIAN", "HERALD"]
 ]
+HEADERS = {
+    'Content-Type': 'application/json',
+    'Authorization': f'Bearer {STRATZ_API_TOKEN}',
+    'User-Agent': "STRATZ_API" 
+}
 
 async def fetch_hero_data(session, hero_id, query):
-    headers = {
-        'Content-Type': 'application/json',
-        'Authorization': f'Bearer {STRATZ_API_TOKEN}',
-        'User-Agent': "STRATZ_API" 
-    }
     payload = json.dumps({'query': query.replace("{hero_id}", str(hero_id))})
 
-    async with session.post(STRATZ_API_URL, headers=headers, data=payload) as response:
+    async with session.post(STRATZ_API_URL, headers=HEADERS, data=payload) as response:
         if response.status == 200:
             result = await response.json()
             try:
@@ -177,14 +177,10 @@ def get_hero_per_position():
     week_long = get_thursday_before_last_thursday_unix_timestamp() # ensure we have a full week of data available
     query = query.replace("{week}", str(week_long))
     
-    headers = {
-        'Content-Type': 'application/json',
-        'Authorization': f'Bearer {STRATZ_API_TOKEN}',
-    }
     payload = json.dumps({'query': query})
 
     time.sleep(1)
-    response = requests.post(STRATZ_API_URL, headers=headers, data=payload)
+    response = requests.post(STRATZ_API_URL, headers=HEADERS, data=payload)
 
     data = response.json()
 
@@ -234,14 +230,10 @@ def get_winrates_per_bracket():
         bracket_str = "[" + ",".join(bracket) + "]"
         query = query.replace("{bracket}", bracket_str)
 
-        headers = {
-            'Content-Type': 'application/json',
-            'Authorization': f'Bearer {STRATZ_API_TOKEN}',
-        }
         payload = json.dumps({'query': query})
 
         time.sleep(1)
-        response = requests.post(STRATZ_API_URL, headers=headers, data=payload)
+        response = requests.post(STRATZ_API_URL, headers=HEADERS, data=payload)
 
         data = response.json()
 
