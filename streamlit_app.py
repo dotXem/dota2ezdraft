@@ -1,5 +1,5 @@
 import streamlit as st
- 
+
 st.set_page_config(layout="wide", page_title="EZDraft - Dota 2", page_icon="⚔️")
 
 import yaml
@@ -11,9 +11,6 @@ import asyncio
 import datetime
 from hero_suggestion import *
 import streamlit_authenticator as stauth
-
-# hashed_passwords = stauth.Hasher(["test"]).generate()
-# print(hashed_passwords)
 
 st.sidebar.header("User")
 with open('users.yaml') as file:
@@ -35,9 +32,8 @@ authenticator = stauth.Authenticate(
 )
 name, authentication_status, username = authenticator.login('sidebar')
 
-
 if authentication_status:
-    st.sidebar.write(f'Connected as *{name}*')    
+    st.sidebar.write(f'Connected as *{name}*')
     authenticator.logout("Logout", 'sidebar')
 elif authentication_status == False:
     st.sidebar.error('Username/password is incorrect')
@@ -129,8 +125,6 @@ else:
     
 st.sidebar.info(f"Using {data_file.split('/')[2][:-5]} data.")
 
-
-
 (
     winrates_per_bracket, 
     counter_scores_df, 
@@ -154,11 +148,20 @@ bracket = st.sidebar.selectbox(
 
 st.title('Dota2 - EZDraft')
 
-enemy_heroes_str = st.text_input( "Enemy heroes (separated by commas)")
-enemy_heroes_str = enemy_heroes_str.lower()
+# Initialize session state for the input fields if not already present
+if "enemy_heroes" not in st.session_state:
+    st.session_state.enemy_heroes = ""
+if "ally_heroes" not in st.session_state:
+    st.session_state.ally_heroes = ""
 
-ally_heroes_str = st.text_input( "Ally heroes (separated by commas)")
-ally_heroes_str = ally_heroes_str.lower()
+# Swap teams button
+if st.button("Swap Teams"):
+    # Swap the values of enemy and ally heroes
+    st.session_state.enemy_heroes, st.session_state.ally_heroes = st.session_state.ally_heroes, st.session_state.enemy_heroes
+
+# Input fields using session state values
+enemy_heroes_str = st.text_input("Enemy heroes (separated by commas)", value=st.session_state.enemy_heroes, key="enemy_heroes")
+ally_heroes_str = st.text_input("Ally heroes (separated by commas)", value=st.session_state.ally_heroes, key="ally_heroes")
 
 filter_list_str = st.selectbox(
     "Select filter list",
@@ -246,7 +249,3 @@ if ally_heroes == [""] or ally_heroes is None:
     ally_heroes = []
 
 display_hero_suggestions(winrates_per_bracket[bracket], counter_scores_df, synergy_scores_df, enemy_heroes, ally_heroes, filter_list=filter_list)
-
-#TODO
-# - add hero photos
-# - use bracket winrates for the is_meta filter
