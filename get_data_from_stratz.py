@@ -31,6 +31,7 @@ async def fetch_hero_data(session, hero_id, query):
     headers = {
         'Content-Type': 'application/json',
         'Authorization': f'Bearer {STRATZ_API_TOKEN}',
+        'User-Agent': "STRATZ_API" 
     }
     payload = json.dumps({'query': query.replace("{hero_id}", str(hero_id))})
 
