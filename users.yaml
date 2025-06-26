@@ -6,7 +6,7 @@ credentials:
       email: null
     bigs:
       name: BIGS
-      password: $2b$12$VEJq9bEpyi1HLFAZr7dZGevZDyQjM5022J5KsMO4N0ZYASLmLC7WK
+      password: $2y$10$T7sEgqtU2tr6Fhu0A.xPxOOSCQF81T9HyeNFil.cXnVQUy0p4aHmC
       email: null
     nft:
       name: NFT
