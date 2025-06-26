@@ -2,11 +2,11 @@ credentials:
   usernames:
     xem:
       name: Xem'
-      password: $2b$12$kq7t6NBW0N8pF0nSHR35B.Vkml8k7QlDzH6c4.l0cpNeIsG7Uw43e
+      password: $2b$12$VEJq9bEpyi1HLFAZr7dZGevZDyQjM5022J5KsMO4N0ZYASLmLC7WK
       email: null
     bigs:
       name: BIGS
-      password: $2b$12$kq7t6NBW0N8pF0nSHR35B.Vkml8k7QlDzH6c4.l0cpNeIsG7Uw43e
+      password: $2b$12$VEJq9bEpyi1HLFAZr7dZGevZDyQjM5022J5KsMO4N0ZYASLmLC7WK
       email: null
     nft:
       name: NFT
