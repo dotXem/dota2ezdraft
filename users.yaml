@@ -27,6 +27,7 @@ heroes_lists:
     P2 Le Jiice: ["Queen of Pain", "Outworld Devourer", "Puck", "Lina", "Death Prophet", "Magnus", "Shadow Fiend", "Earthshaker", "Kunkka", "Ember Spirit", "Storm Spirit", "Sniper", "Meepo", "Arc Warden", "Huskar", "Monkey King"]
     P3 Le Shlagg: ["Centaur Warrunner", "Tidehunter", "Wraith King", "Axe", "Enigma", "Dawnbreaker", "Dark Seer", "Kunkka", "Beastmaster", "Death Prophet", "Doom", "Night Stalker", "Underlord", "Sand King", "Slardar", "Brewmaster", "Venomancer", "Necrophos", "Vengeful Spirit"]
     P4 Truly Cindy: ["Winter Wyvern", "Earthshaker", "Hoodwink", "Tusk", "Shadow Shaman", "Gyrocopter", "Dark Willow", "Batrider", "Tinker", "Dawnbreaker", "Techies", "Undying"]
+    P4 Insonore: ["Shadow Shaman", "Windranger", "Dark Willow", "Muerta", "Rubick", "Tusk", "Nyx Assassin", "Earth Spirit", "Shadow Demon", "Hoodwink"]
     P5 Insonore: ["Crystal Maiden", "Warlock", "Ringmaster", "Dark Willow", "Ancient Apparition", "Jakiro", "Oracle", "Shadow Demon", "Io", "Windranger", "Disruptor", "Vengeful Spirit", "Clockwerk", "Silencer", "Venomancer"]
   nft:
     <<: *xem
