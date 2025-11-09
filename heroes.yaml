@@ -1,6 +1,7 @@
 Abaddon:
   nicknames:
   - abaddon
+  - aba
   roles:
   - p3
   - p4
@@ -8,6 +9,7 @@ Abaddon:
 Alchemist:
   nicknames:
   - alchemist
+  - alch
   roles:
   - p1
 Ancient Apparition:
@@ -28,6 +30,7 @@ Anti-Mage:
 Arc Warden:
   nicknames:
   - arc warden
+  - arc
   roles:
   - p2
 Axe:
@@ -154,6 +157,7 @@ Dark Willow:
   - dark willow
   - Willow
   - willow
+  - dw
   roles:
   - p1
   - p4
@@ -163,6 +167,7 @@ Dawnbreaker:
   - dawnbreaker
   - DB
   - db
+  - dawn
   roles:
   - p4
   - p5
@@ -184,6 +189,7 @@ Death Prophet:
 Disruptor:
   nicknames:
   - disruptor
+  - dis
   roles:
   - p4
   - p5
@@ -210,6 +216,7 @@ Drow Ranger:
 Earth Spirit:
   nicknames:
   - earth spirit
+  - earth
   roles:
   - p2
   - p4
@@ -235,6 +242,7 @@ Elder Titan:
 Ember Spirit:
   nicknames:
   - ember spirit
+  - ember
   roles:
   - p2
 Enchantress:
@@ -277,6 +285,7 @@ Gyrocopter:
 Hoodwink:
   nicknames:
   - hoodwink
+  - hood
   roles:
   - p4
   - p5
@@ -288,6 +297,7 @@ Huskar:
 Invoker:
   nicknames:
   - invoker
+  - invo
   roles:
   - p2
   - p4
@@ -320,6 +330,12 @@ Keeper of the Light:
   - p2
   - p4
   - p5
+Kez:
+  nicknames:
+  - kez
+  roles:
+  - p2
+  - p1
 Kunkka:
   nicknames:
   - kunkka
@@ -381,7 +397,8 @@ Luna:
 Lycan:
   nicknames:
   - lycan
-  roles: []
+  roles:
+  - p3
 Magnus:
   nicknames:
   - magnus
@@ -407,6 +424,7 @@ Mars:
 Medusa:
   nicknames:
   - medusa
+  - dusa
   roles:
   - p1
 Meepo:
@@ -594,6 +612,7 @@ Riki:
 Ringmaster:
   nicknames:
   - ringmaster
+  - ring
   roles:
   - p4
   - p5
@@ -823,6 +842,7 @@ Visage:
 Void Spirit:
   nicknames:
   - void spirit
+  - void
   roles:
   - p2
 Warlock:

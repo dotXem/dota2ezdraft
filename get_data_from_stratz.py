@@ -9,7 +9,7 @@ import requests
 import time
 
 STRATZ_API_URL = "https://api.stratz.com/graphql"
-STRATZ_API_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJTdWJqZWN0IjoiYTEyYTYzYjUtOWI2My00OThkLThlZjEtOGNhZmJiNDliZDY1IiwiU3RlYW1JZCI6IjM2MzM5Mjk3IiwibmJmIjoxNzAxNTExNDU2LCJleHAiOjE3MzMwNDc0NTYsImlhdCI6MTcwMTUxMTQ1NiwiaXNzIjoiaHR0cHM6Ly9hcGkuc3RyYXR6LmNvbSJ9.Nub3VZ58_I-jSZkfca6WI8TVNZbeDmNhjwgxK9xuyGM"
+STRATZ_API_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJTdWJqZWN0IjoiYTEyYTYzYjUtOWI2My00OThkLThlZjEtOGNhZmJiNDliZDY1IiwiU3RlYW1JZCI6IjM2MzM5Mjk3IiwiQVBJVXNlciI6InRydWUiLCJuYmYiOjE3NTY5MTA2OTMsImV4cCI6MTc4ODQ0NjY5MywiaWF0IjoxNzU2OTEwNjkzLCJpc3MiOiJodHRwczovL2FwaS5zdHJhdHouY29tIn0.cYao_H267eXjF9o2umxQjc6XaIRQIDXz9_rEij0MNCU"
 
 # reduce threshold because we don't have all tokens available in stratz dashboard
 MAX_CALLS_PER_SECOND = 5 #20
@@ -247,7 +247,27 @@ def get_winrates_per_bracket():
         winrates[bracket_str] = winrates_for_bracket
     return winrates
 
+# def push_new_data_to_gcs(data):
+#     nb_fetched_heroes = len(data.keys())
+#     success = nb_fetched_heroes == len(HEROES)
+
+#     if success:
+#         yaml_str = yaml.dump(data)
+#         date = str(datetime.datetime.now().date())
+#         file_path = f'heroes-ezdraft/data/{date}.yaml'
+        
+#         try:
+#             with conn.fs.open(file_path, 'w') as f:
+#                 f.write(yaml_str)
+#         except:
+#             print("An error occurred while writing to GCS.")
+
 if __name__ == '__main__':
     data = get_data_from_stratz()
     # data = get_winrates_per_bracket()
+
+    date = str(datetime.datetime.now().date())
+    with open(f"{date}.yaml", "w") as file:
+        yaml.dump(data, file)
+
     print(data)
