@@ -1,0 +1,12 @@
+# For local development only. For production, deploy to Cloud Run (see DEPLOY.md).
+services:
+  streamlit:
+    build: .
+    ports:
+      - "8501:8501"
+    volumes:
+      - ${GCS_CREDENTIALS_PATH:-./.secrets/gcs_credentials.json}:/app/.secrets/gcs_credentials.json:ro
+    environment:
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/.secrets/gcs_credentials.json
+      - STRATZ_API_TOKEN=${STRATZ_API_TOKEN}
+    restart: unless-stopped

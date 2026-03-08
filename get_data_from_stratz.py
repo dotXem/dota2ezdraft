@@ -7,9 +7,10 @@ import datetime
 import calendar
 import requests
 import time
+import os
 
 STRATZ_API_URL = "https://api.stratz.com/graphql"
-STRATZ_API_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJTdWJqZWN0IjoiYTEyYTYzYjUtOWI2My00OThkLThlZjEtOGNhZmJiNDliZDY1IiwiU3RlYW1JZCI6IjM2MzM5Mjk3IiwiQVBJVXNlciI6InRydWUiLCJuYmYiOjE3NTY5MTA2OTMsImV4cCI6MTc4ODQ0NjY5MywiaWF0IjoxNzU2OTEwNjkzLCJpc3MiOiJodHRwczovL2FwaS5zdHJhdHouY29tIn0.cYao_H267eXjF9o2umxQjc6XaIRQIDXz9_rEij0MNCU"
+STRATZ_API_TOKEN = os.environ["STRATZ_API_TOKEN"]
 
 # reduce threshold because we don't have all tokens available in stratz dashboard
 MAX_CALLS_PER_SECOND = 5 #20

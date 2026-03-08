@@ -11,36 +11,40 @@ import asyncio
 import datetime
 from hero_suggestion import *
 import streamlit_authenticator as stauth
+import os
 
 st.sidebar.header("User")
-with open('users.yaml') as file:
-    user_config = yaml.load(file, Loader=yaml.SafeLoader)
 
 @st.cache_data
 def get_users_config():
+    if not os.path.exists('users.yaml'):
+        return None
     with open('users.yaml') as file:
         config = yaml.load(file, Loader=yaml.SafeLoader)
     return config
 
 user_config = get_users_config()
+username = None
+user_heroes = {}
 
-authenticator = stauth.Authenticate(
-    user_config['credentials'],
-    user_config['cookie']['name'],
-    user_config['cookie']['key'],
-    user_config['cookie']['expiry_days']
-)
-name, authentication_status, username = authenticator.login('sidebar')
+if user_config:
+    authenticator = stauth.Authenticate(
+        user_config['credentials'],
+        user_config['cookie']['name'],
+        user_config['cookie']['key'],
+        user_config['cookie']['expiry_days']
+    )
+    name, authentication_status, username = authenticator.login('sidebar')
 
-if authentication_status:
-    st.sidebar.write(f'Connected as *{name}*')
-    authenticator.logout("Logout", 'sidebar')
-elif authentication_status == False:
-    st.sidebar.error('Username/password is incorrect')
-elif authentication_status == None:
-    st.sidebar.warning('Enter your username and password to access custom heroes lists')
+    if authentication_status:
+        st.sidebar.write(f'Connected as *{name}*')
+        authenticator.logout("Logout", 'sidebar')
+    elif authentication_status == False:
+        st.sidebar.error('Username/password is incorrect')
+    elif authentication_status == None:
+        st.sidebar.warning('Enter your username and password to access custom heroes lists')
 
-user_heroes = user_config["heroes_lists"].get(username, {})
+    user_heroes = user_config["heroes_lists"].get(username, {})
 
 st.sidebar.header("Data")
 
