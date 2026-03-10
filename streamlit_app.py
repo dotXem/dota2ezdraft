@@ -9,40 +9,70 @@ from get_data_from_stratz import HEROES, BRACKETS
 from st_files_connection import FilesConnection
 from hero_suggestion import *
 import streamlit_authenticator as stauth
-import os
+from user_manager import load_config, save_config, get_user_heroes, register_user, change_password, save_hero_list, delete_hero_list
 
 st.sidebar.header("User")
 
-@st.cache_data
-def get_users_config():
-    if not os.path.exists('users.yaml'):
-        return None
-    with open('users.yaml') as file:
-        config = yaml.load(file, Loader=yaml.SafeLoader)
-    return config
+if "user_config" not in st.session_state:
+    st.session_state.user_config = load_config()
 
-user_config = get_users_config()
+config = st.session_state.user_config
 username = None
-user_heroes = {}
+authentication_status = None
 
-if user_config:
-    authenticator = stauth.Authenticate(
-        user_config['credentials'],
-        user_config['cookie']['name'],
-        user_config['cookie']['key'],
-        user_config['cookie']['expiry_days']
-    )
-    name, authentication_status, username = authenticator.login('sidebar')
+authenticator = stauth.Authenticate(
+    config['credentials'],
+    config['cookie']['name'],
+    config['cookie']['key'],
+    config['cookie']['expiry_days']
+)
 
-    if authentication_status:
-        st.sidebar.write(f'Connected as *{name}*')
-        authenticator.logout("Logout", 'sidebar')
-    elif authentication_status == False:
-        st.sidebar.error('Username/password is incorrect')
-    elif authentication_status == None:
-        st.sidebar.warning('Enter your username and password to access custom heroes lists')
+name, authentication_status, username = authenticator.login('sidebar')
 
-    user_heroes = user_config["heroes_lists"].get(username, {})
+if authentication_status:
+    st.sidebar.write(f'Connected as *{name}*')
+    authenticator.logout("Logout", 'sidebar')
+    with st.sidebar.expander("Change password"):
+        current_pw = st.text_input("Current password", type="password", key="current_pw")
+        new_pw = st.text_input("New password", type="password", key="new_pw")
+        new_pw_confirm = st.text_input("Confirm new password", type="password", key="new_pw_confirm")
+        if st.button("Update password"):
+            if not current_pw or not new_pw:
+                st.error("Please fill in all fields.")
+            elif new_pw != new_pw_confirm:
+                st.error("New passwords don't match.")
+            else:
+                success, err = change_password(config, username, current_pw, new_pw)
+                if success:
+                    st.success("Password updated!")
+                else:
+                    st.error(err)
+elif authentication_status == False:
+    st.sidebar.error('Username/password is incorrect')
+elif authentication_status is None:
+    st.sidebar.warning('Enter your username and password')
+
+if not authentication_status:
+    with st.sidebar.expander("Create an account"):
+        reg_name = st.text_input("Display name", key="reg_name")
+        reg_username = st.text_input("Username", key="reg_username")
+        reg_password = st.text_input("Password", type="password", key="reg_password")
+        reg_password_confirm = st.text_input("Confirm password", type="password", key="reg_password_confirm")
+        if st.button("Register"):
+            if not reg_name or not reg_username or not reg_password:
+                st.error("All fields are required.")
+            elif len(reg_password) < 8:
+                st.error("Password must be at least 8 characters.")
+            elif reg_password != reg_password_confirm:
+                st.error("Passwords don't match.")
+            else:
+                success, err = register_user(config, reg_username, reg_name, reg_password)
+                if success:
+                    st.success("Account created! You can now log in.")
+                else:
+                    st.error(err)
+
+user_heroes = get_user_heroes(config, username)
 
 st.sidebar.header("Data")
 
@@ -129,44 +159,6 @@ bracket = st.sidebar.selectbox(
 
 st.title('Dota2 - EZDraft')
 
-# Initialize session state for the input fields if not already present
-if "enemy_heroes" not in st.session_state:
-    st.session_state.enemy_heroes = ""
-if "ally_heroes" not in st.session_state:
-    st.session_state.ally_heroes = ""
-
-# Swap teams button
-if st.button("Swap Teams"):
-    # Swap the values of enemy and ally heroes
-    st.session_state.enemy_heroes, st.session_state.ally_heroes = st.session_state.ally_heroes, st.session_state.enemy_heroes
-
-# Input fields using session state values
-enemy_heroes_str = st.text_input("Enemy heroes (separated by commas)", value=st.session_state.enemy_heroes, key="enemy_heroes")
-ally_heroes_str = st.text_input("Ally heroes (separated by commas)", value=st.session_state.ally_heroes, key="ally_heroes")
-
-filter_list_str = st.selectbox(
-    "Select filter list",
-    [
-        "all heroes",
-        "p1",
-        "p2",
-        "p3",
-        "p4",
-        "p5",
-        *user_heroes.keys()
-    ]
-)
-
-filter_list = {
-    "all heroes": heroes,
-    "p1": p1_list,
-    "p2": p2_list,
-    "p3": p3_list,
-    "p4": p4_list,
-    "p5": p5_list,
-    **user_heroes
-}.get(filter_list_str)
-
 def display_hero_suggestions(winrates_series, counter_scores_df, synergy_scores_df, enemy_heroes, ally_heroes, filter_list=heroes):
     suggestions_df = suggest_heroes_from_ally_and_enemy(
         winrates_series, 
@@ -219,14 +211,97 @@ def display_hero_suggestions(winrates_series, counter_scores_df, synergy_scores_
         height=1000,
     )
 
-enemy_heroes = enemy_heroes_str.split(",")
-enemy_heroes = [nickname_table.get(hero, hero) for hero in enemy_heroes]
-if enemy_heroes == [""] or enemy_heroes is None:
-    enemy_heroes = []
+draft_tab, lists_tab = st.tabs(["Draft", "My Hero Lists"])
 
-ally_heroes = ally_heroes_str.split(",")
-ally_heroes = [nickname_table.get(hero, hero) for hero in ally_heroes]
-if ally_heroes == [""] or ally_heroes is None:
-    ally_heroes = []
+with draft_tab:
+    # Initialize session state for the input fields if not already present
+    if "enemy_heroes" not in st.session_state:
+        st.session_state.enemy_heroes = ""
+    if "ally_heroes" not in st.session_state:
+        st.session_state.ally_heroes = ""
 
-display_hero_suggestions(winrates_per_bracket[bracket], counter_scores_df, synergy_scores_df, enemy_heroes, ally_heroes, filter_list=filter_list)
+    # Swap teams button
+    if st.button("Swap Teams"):
+        st.session_state.enemy_heroes, st.session_state.ally_heroes = st.session_state.ally_heroes, st.session_state.enemy_heroes
+
+    # Input fields using session state values
+    enemy_heroes_str = st.text_input("Enemy heroes (separated by commas)", value=st.session_state.enemy_heroes, key="enemy_heroes")
+    ally_heroes_str = st.text_input("Ally heroes (separated by commas)", value=st.session_state.ally_heroes, key="ally_heroes")
+
+    filter_list_str = st.selectbox(
+        "Select filter list",
+        [
+            "all heroes",
+            "p1",
+            "p2",
+            "p3",
+            "p4",
+            "p5",
+            *user_heroes.keys()
+        ]
+    )
+
+    filter_list = {
+        "all heroes": heroes,
+        "p1": p1_list,
+        "p2": p2_list,
+        "p3": p3_list,
+        "p4": p4_list,
+        "p5": p5_list,
+        **user_heroes
+    }.get(filter_list_str)
+
+    enemy_heroes = enemy_heroes_str.split(",")
+    enemy_heroes = [nickname_table.get(hero, hero) for hero in enemy_heroes]
+    if enemy_heroes == [""] or enemy_heroes is None:
+        enemy_heroes = []
+
+    ally_heroes = ally_heroes_str.split(",")
+    ally_heroes = [nickname_table.get(hero, hero) for hero in ally_heroes]
+    if ally_heroes == [""] or ally_heroes is None:
+        ally_heroes = []
+
+    display_hero_suggestions(winrates_per_bracket[bracket], counter_scores_df, synergy_scores_df, enemy_heroes, ally_heroes, filter_list=filter_list)
+
+with lists_tab:
+    if not authentication_status:
+        st.info("Log in to manage your custom hero lists.")
+    else:
+        with st.form("create_list_form"):
+            st.subheader("Create a new list")
+            new_list_name = st.text_input("List name")
+            new_list_heroes = st.multiselect("Select heroes", sorted(heroes))
+            submitted = st.form_submit_button("Create list")
+            if submitted:
+                if not new_list_name:
+                    st.error("Please enter a list name.")
+                elif not new_list_heroes:
+                    st.error("Please select at least one hero.")
+                else:
+                    save_hero_list(config, username, new_list_name, new_list_heroes)
+                    st.success(f"List '{new_list_name}' created!")
+                    st.rerun()
+
+        if user_heroes:
+            st.subheader("Your lists")
+            for list_name, hero_list in user_heroes.items():
+                with st.expander(f"{list_name} ({len(hero_list)} heroes)"):
+                    updated = st.multiselect(
+                        "Heroes",
+                        sorted(heroes),
+                        default=hero_list,
+                        key=f"edit_{list_name}"
+                    )
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.button("Save", key=f"save_{list_name}"):
+                            save_hero_list(config, username, list_name, updated)
+                            st.success("Saved!")
+                            st.rerun()
+                    with col2:
+                        if st.button("Delete", key=f"del_{list_name}"):
+                            delete_hero_list(config, username, list_name)
+                            st.success("Deleted!")
+                            st.rerun()
+        else:
+            st.info("No custom lists yet. Create one above!")
