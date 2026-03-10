@@ -1,0 +1,6 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-f', 'Dockerfile.job', '-t', '$_IMAGE', '.']
+images: ['$_IMAGE']
+substitutions:
+  _IMAGE: 'europe-west1-docker.pkg.dev/ezdraft/ezdraft/fetch-job'

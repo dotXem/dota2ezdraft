@@ -1,19 +1,16 @@
-import asyncio
-import aiohttp
 import yaml
 import json
 import time
 import datetime
 import calendar
 import requests
-import time
 import os
 
 STRATZ_API_URL = "https://api.stratz.com/graphql"
 STRATZ_API_TOKEN = os.environ["STRATZ_API_TOKEN"]
 
 # reduce threshold because we don't have all tokens available in stratz dashboard
-MAX_CALLS_PER_SECOND = 5 #20
+MAX_CALLS_PER_SECOND = 1
 MAX_CALLS_PER_MINUTE = 100 #250
 
 with open("stratz_hero_to_id.yaml", "r") as file:
@@ -33,37 +30,39 @@ HEADERS = {
     'User-Agent': "STRATZ_API" 
 }
 
-async def fetch_hero_data(session, hero_id, query):
+def fetch_hero_data(session, hero_id, query):
     payload = json.dumps({'query': query.replace("{hero_id}", str(hero_id))})
 
-    async with session.post(STRATZ_API_URL, headers=HEADERS, data=payload) as response:
-        if response.status == 200:
-            result = await response.json()
-            try:
-                result_data = result["data"]["heroStats"]["heroVsHeroMatchup"]["disadvantage"][0]
-                hero = STRATZ_ID_TO_HERO[hero_id]
-                data = {
-                    hero: {
-                        "matchup_winrate": {
-                            STRATZ_ID_TO_HERO[matchup["heroId2"]]: matchup["winsAverage"]
-                            for matchup in result_data["vs"]
-                        },
-                        "synergy_winrate": {
-                            STRATZ_ID_TO_HERO[matchup["heroId2"]]: matchup["winsAverage"]
-                            for matchup in result_data["with"]
-                        },
-                        "winrate": result_data["vs"][0]["winRateHeroId1"]
-                    }
+    response = session.post(STRATZ_API_URL, headers=HEADERS, data=payload)
+    if response.status_code == 200:
+        result = response.json()
+        try:
+            result_data = result["data"]["heroStats"]["heroVsHeroMatchup"]["disadvantage"][0]
+            hero = STRATZ_ID_TO_HERO[hero_id]
+            data = {
+                hero: {
+                    "matchup_winrate": {
+                        STRATZ_ID_TO_HERO[matchup["heroId2"]]: matchup["winsAverage"]
+                        for matchup in result_data["vs"]
+                        if matchup["heroId2"] in STRATZ_ID_TO_HERO
+                    },
+                    "synergy_winrate": {
+                        STRATZ_ID_TO_HERO[matchup["heroId2"]]: matchup["winsAverage"]
+                        for matchup in result_data["with"]
+                        if matchup["heroId2"] in STRATZ_ID_TO_HERO
+                    },
+                    "winrate": result_data["vs"][0]["winRateHeroId1"]
                 }
-                return data
-            except (KeyError, IndexError) as e:
-                print(f"Error processing data for hero ID {hero_id}: {e}")
-                return {}
-        else:
-            print(f"Error: {response.status} - {await response.text()}")
+            }
+            return data
+        except (KeyError, IndexError) as e:
+            print(f"Error processing data for hero ID {hero_id}: {e}")
             return {}
+    else:
+        print(f"Error: {response.status_code} - {response.text}")
+        return {}
 
-async def get_matchup_data_from_stratz():
+def get_matchup_data_from_stratz(session):
     hero_ids = list(STRATZ_ID_TO_HERO.keys())
 
     query = """
@@ -92,56 +91,46 @@ async def get_matchup_data_from_stratz():
 
     data = {}
 
-    chunk_size = MAX_CALLS_PER_SECOND  
-    chunks = [hero_ids[i:i + chunk_size] for i in range(0, len(hero_ids), chunk_size)]
+    total_requests = 0
+    start_minute = time.time()
 
-    async with aiohttp.ClientSession() as session:
-        total_requests = 0
-        start_minute = time.time()
+    for hero_id in hero_ids:
+        start_time = time.time()
 
-        for chunk in chunks:
-            start_time = time.time()
-            tasks = []
-            for hero_id in chunk:
-                task = asyncio.create_task(fetch_hero_data(session, hero_id, query))
-                tasks.append(task)
+        hero_data = fetch_hero_data(session, hero_id, query)
+        data.update(hero_data)
 
-            # Wait for all tasks in the current chunk to complete
-            results = await asyncio.gather(*tasks)
+        total_requests += 1
 
-            for hero_data in results:
-                data.update(hero_data)
+        # Enforce per-minute rate limit
+        elapsed_minute = time.time() - start_minute
+        if total_requests >= MAX_CALLS_PER_MINUTE:
+            if elapsed_minute < 60:
+                sleep_time = 60 - elapsed_minute
+                print(f"Reached {MAX_CALLS_PER_MINUTE} requests in {elapsed_minute:.2f} seconds. Sleeping for {sleep_time:.2f} seconds.")
+                time.sleep(sleep_time)
+            total_requests = 0
+            start_minute = time.time()
 
-            total_requests += len(chunk)
-
-            # Enforce per-minute rate limit
-            elapsed_minute = time.time() - start_minute
-            if total_requests >= MAX_CALLS_PER_MINUTE:
-                if elapsed_minute < 60:
-                    sleep_time = 60 - elapsed_minute
-                    print(f"Reached {MAX_CALLS_PER_MINUTE} requests in {elapsed_minute:.2f} seconds. Sleeping for {sleep_time:.2f} seconds.")
-                    await asyncio.sleep(sleep_time)
-                total_requests = 0
-                start_minute = time.time()
-
-            # Enforce per-second rate limit
-            elapsed = time.time() - start_time
-            if elapsed < 1:
-                await asyncio.sleep(1 - elapsed)
+        # Enforce per-second rate limit
+        elapsed = time.time() - start_time
+        if elapsed < 1:
+            time.sleep(1 - elapsed)
 
     return data
 
 def get_data_from_stratz():
-    data = asyncio.run(get_matchup_data_from_stratz())
+    session = requests.Session()
+    data = get_matchup_data_from_stratz(session)
 
-    winrates_per_bracket = get_winrates_per_bracket()
+    winrates_per_bracket = get_winrates_per_bracket(session)
     for hero, hero_data in data.items():
         hero_data["winrate_brackets"] = {
             bracket: winrates_per_bracket[bracket][hero]
             for bracket in winrates_per_bracket
         }
 
-    hero_per_position = get_hero_per_position()
+    hero_per_position = get_hero_per_position(session)
     for hero, hero_data in data.items():
         hero_data["positions"] = hero_per_position[hero]
 
@@ -161,7 +150,7 @@ def get_thursday_before_last_thursday_unix_timestamp():
 
     return unix_timestamp
 
-def get_hero_per_position():    
+def get_hero_per_position(session):    
     query = """
         {
             heroStats {
@@ -181,7 +170,7 @@ def get_hero_per_position():
     payload = json.dumps({'query': query})
 
     time.sleep(1)
-    response = requests.post(STRATZ_API_URL, headers=HEADERS, data=payload)
+    response = session.post(STRATZ_API_URL, headers=HEADERS, data=payload)
 
     data = response.json()
 
@@ -201,6 +190,8 @@ def get_hero_per_position():
 
     hero_positions = {}
     for hero_id in hero_position_counts:
+        if hero_id not in STRATZ_ID_TO_HERO:
+            continue
         hero_name = STRATZ_ID_TO_HERO[hero_id]
         hero_positions[hero_name] = []
 
@@ -213,7 +204,7 @@ def get_hero_per_position():
 
     return hero_positions
 
-def get_winrates_per_bracket():
+def get_winrates_per_bracket(session):
     winrates = {}
     for bracket in BRACKETS:
         query = """
@@ -234,13 +225,15 @@ def get_winrates_per_bracket():
         payload = json.dumps({'query': query})
 
         time.sleep(1)
-        response = requests.post(STRATZ_API_URL, headers=HEADERS, data=payload)
+        response = session.post(STRATZ_API_URL, headers=HEADERS, data=payload)
 
         data = response.json()
 
         winrates_for_bracket = {}
         for hero_data in data["data"]["heroStats"]["winWeek"]:
             hero_id = hero_data["heroId"]
+            if hero_id not in STRATZ_ID_TO_HERO:
+                continue
             hero_name = STRATZ_ID_TO_HERO[hero_id]
             winrate = hero_data["winCount"] / hero_data["matchCount"]
             winrates_for_bracket[hero_name] = winrate

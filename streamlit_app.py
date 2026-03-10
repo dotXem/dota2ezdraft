@@ -5,10 +5,8 @@ st.set_page_config(layout="wide", page_title="EZDraft - Dota 2", page_icon="âš”ï
 import yaml
 import pandas as pd
 import numpy as np
-from get_data_from_stratz import get_data_from_stratz, HEROES, BRACKETS
+from get_data_from_stratz import HEROES, BRACKETS
 from st_files_connection import FilesConnection
-import asyncio
-import datetime
 from hero_suggestion import *
 import streamlit_authenticator as stauth
 import os
@@ -92,27 +90,6 @@ def get_data(data_file):
     return winrates_per_bracket, counter_scores_df, synergy_scores_df, exceptionnal_counters_df, exceptionnal_synergy_df, heroes, *heroes_per_position.values(), nickname_table
 
 conn = st.connection('gcs', type=FilesConnection)
-
-update_data_button = st.sidebar.button("Update Data")
-if update_data_button:
-    st.sidebar.info("Fetching new data...")
-    data = get_data_from_stratz()
-    nb_fetched_heroes = len(data.keys())
-    success = nb_fetched_heroes == len(HEROES)
-
-    if success:
-        yaml_str = yaml.dump(data)
-        date = str(datetime.datetime.now().date())
-        file_path = f'heroes-ezdraft/data/{date}.yaml'
-        
-        try:
-            with conn.fs.open(file_path, 'w') as f:
-                f.write(yaml_str)
-            st.sidebar.success("New data collected!")
-        except Exception as e:
-            st.sidebar.error(f"An error occurred: {e}")
-    else:
-        st.sidebar.error(f"Failed fetching new data, only {nb_fetched_heroes} heroes collected. Try again in 1 minute.")
 
 data_file_list = conn.fs.ls("heroes-ezdraft/data/")
 data_file_list = sorted(data_file_list, reverse=True)

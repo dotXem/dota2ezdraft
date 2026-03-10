@@ -119,6 +119,60 @@ gcloud run domain-mappings create \
 
 Then add the DNS records shown in the output. Cloud Run handles HTTPS automatically.
 
+## Optional: Daily data fetch cron job
+
+A Cloud Run Job + Cloud Scheduler can fetch Stratz data automatically every day.
+
+### 1. Build the job image
+
+```bash
+gcloud builds submit --tag europe-west1-docker.pkg.dev/$PROJECT_ID/ezdraft/fetch-job -f Dockerfile.job
+```
+
+### 2. Create the Cloud Run Job
+
+```bash
+gcloud run jobs create ezdraft-fetch \
+  --image europe-west1-docker.pkg.dev/$PROJECT_ID/ezdraft/fetch-job \
+  --region europe-west1 \
+  --memory 512Mi \
+  --task-timeout 600 \
+  --set-secrets=STRATZ_API_TOKEN=stratz-api-token:latest
+```
+
+### 3. Schedule it daily with Cloud Scheduler
+
+```bash
+gcloud scheduler jobs create http ezdraft-daily-fetch \
+  --location europe-west1 \
+  --schedule "0 8 * * *" \
+  --time-zone "Europe/Paris" \
+  --uri "https://europe-west1-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/$PROJECT_ID/jobs/ezdraft-fetch:run" \
+  --http-method POST \
+  --oauth-service-account-email $(gcloud projects describe $PROJECT_ID --format='value(projectNumber)')-compute@developer.gserviceaccount.com
+```
+
+This runs every day at 8:00 AM Paris time. To change the schedule, edit the cron expression.
+
+### Useful commands
+
+```bash
+# Run the job manually
+gcloud run jobs execute ezdraft-fetch --region europe-west1
+
+# View job executions
+gcloud run jobs executions list --job ezdraft-fetch --region europe-west1
+
+# View logs
+gcloud run jobs logs read ezdraft-fetch --region europe-west1
+
+# Update the job image after code changes
+gcloud builds submit --tag europe-west1-docker.pkg.dev/$PROJECT_ID/ezdraft/fetch-job -f Dockerfile.job
+gcloud run jobs update ezdraft-fetch \
+  --image europe-west1-docker.pkg.dev/$PROJECT_ID/ezdraft/fetch-job \
+  --region europe-west1
+```
+
 ## Local development
 
 For local development, use docker-compose (requires a GCS credentials file):

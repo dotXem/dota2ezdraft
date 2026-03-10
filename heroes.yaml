@@ -336,6 +336,12 @@ Kez:
   roles:
   - p2
   - p1
+Largo:
+  nicknames:
+  - largo
+  roles:
+  - p3
+  - p5
 Kunkka:
   nicknames:
   - kunkka
