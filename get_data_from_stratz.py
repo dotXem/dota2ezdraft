@@ -5,6 +5,9 @@ import datetime
 import calendar
 import requests
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 STRATZ_API_URL = "https://api.stratz.com/graphql"
 STRATZ_API_TOKEN = os.environ["STRATZ_API_TOKEN"]

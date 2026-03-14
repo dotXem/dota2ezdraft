@@ -3,3 +3,4 @@ data
 __pycache__
 users.yaml
 .secrets/
+.env

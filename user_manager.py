@@ -4,13 +4,18 @@ import yaml
 import gcsfs
 import bcrypt
 import secrets
+import streamlit as st
 
 BUCKET = "heroes-ezdraft"
 USERS_PATH = f"{BUCKET}/users.yaml"
 
 
 def _get_fs():
-    return gcsfs.GCSFileSystem()
+    try:
+        creds = dict(st.secrets["connections"]["gcs"])
+        return gcsfs.GCSFileSystem(token=creds)
+    except Exception:
+        return gcsfs.GCSFileSystem()
 
 
 def _default_config():
@@ -113,4 +118,38 @@ def delete_hero_list(config, username, list_name):
     lists = config.get("heroes_lists", {}).get(username, {})
     if list_name in lists:
         del lists[list_name]
+        save_config(config)
+
+
+# --- Scouting ---
+
+def is_scouting_user(config, username):
+    """Check if user has access to scouting features."""
+    if not username:
+        return False
+    return username in config.get("scouting_users", [])
+
+
+def get_scouting_teams(config, username):
+    """Get scouting teams for a user. Returns {team_name: {players: [...]}}."""
+    if not username:
+        return {}
+    return config.get("scouting_teams", {}).get(username, {})
+
+
+def save_scouting_team(config, username, team_name, players):
+    """Save a scouting team. players: list of {'steam_id': int, 'name': str}."""
+    if "scouting_teams" not in config:
+        config["scouting_teams"] = {}
+    if username not in config["scouting_teams"]:
+        config["scouting_teams"][username] = {}
+    config["scouting_teams"][username][team_name] = {"players": players}
+    save_config(config)
+
+
+def delete_scouting_team(config, username, team_name):
+    """Delete a scouting team."""
+    teams = config.get("scouting_teams", {}).get(username, {})
+    if team_name in teams:
+        del teams[team_name]
         save_config(config)
