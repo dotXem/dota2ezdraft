@@ -420,7 +420,7 @@ with meta_tab:
                         "Contest%": st.column_config.NumberColumn(format="%.1f%%"),
                     },
                     hide_index=True,
-                    use_container_width=True,
+                    width="stretch",
                     height=800,
                 )
             else:
@@ -439,208 +439,233 @@ with meta_tab:
 
 if show_scouting:
     with tab_objects[3]:
-        teams = get_scouting_teams(config, username)
 
-        # --- Create Team ---
-        with st.expander("Create a new team"):
-            new_team_name = st.text_input("Team name", key="scout_new_name")
-            new_team_ids = st.text_area(
-                "Player Steam IDs (one per line, 32-bit or 64-bit)",
-                placeholder="e.g.\n12345678\n87654321",
-                key="scout_new_ids",
-                height=150,
-            )
-            if st.button("Create team", key="scout_create_btn"):
-                if not new_team_name.strip():
-                    st.error("Enter a team name.")
-                elif not new_team_ids.strip():
-                    st.error("Enter at least one Steam ID.")
-                else:
-                    try:
-                        players = []
-                        for line in new_team_ids.strip().splitlines():
-                            line = line.strip()
-                            if line:
-                                sid = normalize_steam_id(line)
-                                players.append({"steam_id": sid, "name": ""})
-                        if not players:
-                            st.error("No valid Steam IDs entered.")
-                        else:
-                            save_scouting_team(config, username, new_team_name.strip(), players)
-                            st.success(f"Team '{new_team_name.strip()}' created with {len(players)} players!")
-                            st.rerun()
-                    except ValueError:
-                        st.error("Invalid Steam ID. Use numeric 32-bit or 64-bit IDs.")
+        @st.fragment
+        def _scouting_fragment():
+            teams = get_scouting_teams(config, username)
 
-        # --- Team Selection & Scouting ---
-        if not teams:
-            st.info("No scouting teams yet. Create one above!")
-        else:
-            selected_team = st.selectbox("Select team", list(teams.keys()), key="scout_team_sel")
-            team_data = teams[selected_team]
-            players = team_data.get("players", [])
-
-            # Show current roster
-            if players:
-                player_display = ", ".join(p.get("name") or str(p["steam_id"]) for p in players)
-                st.caption(f"Roster: {player_display}")
-
-            # Edit team
-            with st.expander("Edit team"):
-                edit_ids = st.text_area(
-                    "Steam IDs (one per line)",
-                    value="\n".join(str(p["steam_id"]) for p in players),
-                    key="scout_edit_ids",
+            # --- Create Team ---
+            with st.expander("Create a new team"):
+                new_team_name = st.text_input("Team name", key="scout_new_name")
+                new_team_ids = st.text_area(
+                    "Player Steam IDs (one per line, 32-bit or 64-bit)",
+                    placeholder="e.g.\n12345678\n87654321",
+                    key="scout_new_ids",
+                    height=150,
                 )
-                ecol1, ecol2 = st.columns(2)
-                with ecol1:
-                    if st.button("Save changes", key="scout_save_btn"):
+                if st.button("Create team", key="scout_create_btn"):
+                    if not new_team_name.strip():
+                        st.error("Enter a team name.")
+                    elif not new_team_ids.strip():
+                        st.error("Enter at least one Steam ID.")
+                    else:
                         try:
-                            updated = []
-                            existing = {p["steam_id"]: p.get("name", "") for p in players}
-                            for line in edit_ids.strip().splitlines():
+                            players = []
+                            for line in new_team_ids.strip().splitlines():
                                 line = line.strip()
                                 if line:
                                     sid = normalize_steam_id(line)
-                                    updated.append({"steam_id": sid, "name": existing.get(sid, "")})
-                            save_scouting_team(config, username, selected_team, updated)
-                            st.success("Team updated!")
-                            st.rerun()
+                                    players.append({"steam_id": sid, "name": ""})
+                            if not players:
+                                st.error("No valid Steam IDs entered.")
+                            else:
+                                save_scouting_team(config, username, new_team_name.strip(), players)
+                                st.success(f"Team '{new_team_name.strip()}' created with {len(players)} players!")
+                                st.rerun(scope="fragment")
                         except ValueError:
-                            st.error("Invalid Steam ID format.")
-                with ecol2:
-                    if st.button("Delete team", key="scout_del_btn"):
-                        delete_scouting_team(config, username, selected_team)
-                        st.success(f"Team '{selected_team}' deleted!")
-                        st.rerun()
+                            st.error("Invalid Steam ID. Use numeric 32-bit or 64-bit IDs.")
 
-            # Fetch data
-            scout_key = f"scout_data_{selected_team}"
+            # --- Team Selection & Scouting ---
+            if not teams:
+                st.info("No scouting teams yet. Create one above!")
+            else:
+                selected_team = st.selectbox("Select team", list(teams.keys()), key="scout_team_sel")
+                team_data = teams[selected_team]
+                players = team_data.get("players", [])
 
-            # Show cache status
-            if scout_key in st.session_state:
-                fetched_at = st.session_state[scout_key].get("fetched_at", "")
-                if fetched_at:
-                    import datetime as _dt
-                    try:
-                        ft = _dt.datetime.fromisoformat(fetched_at)
-                        delta = _dt.datetime.utcnow() - ft
-                        hours = delta.total_seconds() / 3600
-                        if hours < 1:
-                            age_str = f"{int(delta.total_seconds() / 60)} minutes ago"
-                        else:
-                            age_str = f"{hours:.1f} hours ago"
-                        st.caption(f"📦 Data cached — last fetched {age_str}")
-                    except ValueError:
-                        pass
+                # Show current roster
+                if players:
+                    player_display = ", ".join(p.get("name") or str(p["steam_id"]) for p in players)
+                    st.caption(f"Roster: {player_display}")
 
-            if st.button("Fetch scouting data from Stratz", type="primary", key="scout_fetch_btn"):
-                with st.spinner(f"Fetching data for {len(players)} players from Stratz..."):
-                    try:
-                        result = fetch_all_scouting_data(players)
-                        st.session_state[scout_key] = result
-                        # Update player names from fetched data
-                        for p in players:
-                            sid = normalize_steam_id(p["steam_id"])
-                            fetched_name = result["player_names"].get(sid, "")
-                            if fetched_name:
-                                p["name"] = fetched_name
-                        save_scouting_team(config, username, selected_team, players)
-                        st.success("Data fetched successfully!")
-                    except Exception as e:
-                        st.error(f"Error fetching data: {e}")
-
-            # Display results
-            if scout_key in st.session_state:
-                data = st.session_state[scout_key]
-                fetched_ts = data.get("fetched_at", "")
-
-                # Full composite image download
-                full_img = generate_full_scouting_image(data, selected_team, players)
-                if full_img:
-                    st.download_button(
-                        "🖼️ Download full scouting image",
-                        data=full_img,
-                        file_name=f"scouting_{selected_team.replace(' ', '_')}_full.png",
-                        mime="image/png",
-                        key=f"img_full_{fetched_ts}",
+                # Edit team
+                with st.expander("Edit team"):
+                    edit_ids = st.text_area(
+                        "Steam IDs (one per line)",
+                        value="\n".join(str(p["steam_id"]) for p in players),
+                        key="scout_edit_ids",
                     )
+                    ecol1, ecol2 = st.columns(2)
+                    with ecol1:
+                        if st.button("Save changes", key="scout_save_btn"):
+                            try:
+                                updated = []
+                                existing = {p["steam_id"]: p.get("name", "") for p in players}
+                                for line in edit_ids.strip().splitlines():
+                                    line = line.strip()
+                                    if line:
+                                        sid = normalize_steam_id(line)
+                                        updated.append({"steam_id": sid, "name": existing.get(sid, "")})
+                                save_scouting_team(config, username, selected_team, updated)
+                                st.success("Team updated!")
+                                st.rerun(scope="fragment")
+                            except ValueError:
+                                st.error("Invalid Steam ID format.")
+                    with ecol2:
+                        if st.button("Delete team", key="scout_del_btn"):
+                            delete_scouting_team(config, username, selected_team)
+                            st.success(f"Team '{selected_team}' deleted!")
+                            st.rerun(scope="fragment")
 
-                st.markdown("---")
-                st.subheader("Player Hero Pools (Past 2 Months)")
+                # Fetch data
+                scout_key = f"scout_data_{selected_team}"
 
-                for p in players:
-                    sid = normalize_steam_id(p["steam_id"])
-                    name = data["player_names"].get(sid, str(sid))
-                    hero_df = data.get("player_heroes", {}).get(sid, pd.DataFrame())
+                # Show cache status
+                if scout_key in st.session_state:
+                    fetched_at = st.session_state[scout_key].get("fetched_at", "")
+                    if fetched_at:
+                        import datetime as _dt
+                        try:
+                            ft = _dt.datetime.fromisoformat(fetched_at)
+                            delta = _dt.datetime.utcnow() - ft
+                            hours = delta.total_seconds() / 3600
+                            if hours < 1:
+                                age_str = f"{int(delta.total_seconds() / 60)} minutes ago"
+                            else:
+                                age_str = f"{hours:.1f} hours ago"
+                            st.caption(f"📦 Data cached — last fetched {age_str}")
+                        except ValueError:
+                            pass
 
-                    dotabuff = f"https://www.dotabuff.com/players/{sid}"
-                    stratz_url = f"https://stratz.com/players/{sid}"
-                    opendota = f"https://www.opendota.com/players/{sid}"
+                if st.button("Fetch scouting data from Stratz", type="primary", key="scout_fetch_btn"):
+                    with st.spinner(f"Fetching data for {len(players)} players from Stratz..."):
+                        try:
+                            result = fetch_all_scouting_data(players)
+                            st.session_state[scout_key] = result
+                            # Update player names from fetched data
+                            for p in players:
+                                sid = normalize_steam_id(p["steam_id"])
+                                fetched_name = result["player_names"].get(sid, "")
+                                if fetched_name:
+                                    p["name"] = fetched_name
+                            save_scouting_team(config, username, selected_team, players)
+                            st.success("Data fetched successfully!")
+                        except Exception as e:
+                            st.error(f"Error fetching data: {e}")
 
-                    with st.expander(f"**{name}** (ID: {sid})", expanded=True):
-                        st.markdown(
-                            f"[Dotabuff]({dotabuff}) · [Stratz]({stratz_url}) · [OpenDota]({opendota})"
-                        )
+                # Display results
+                if scout_key in st.session_state:
+                    data = st.session_state[scout_key]
+                    fetched_ts = data.get("fetched_at", "")
 
-                        if hero_df.empty:
-                            st.warning("No matches found — profile may be private.")
-                        else:
-                            st.markdown(f"**Heroes played in the past 2 months ({len(hero_df)} heroes):**")
-                            st.dataframe(
-                                hero_df,
-                                column_config={
-                                    "Icon": st.column_config.ImageColumn("", width="small"),
-                                    "Winrate": st.column_config.NumberColumn(format="%.1f%%"),
-                                },
-                                hide_index=True,
-                                use_container_width=True,
-                            )
+                    # Full composite image download
+                    full_img = generate_full_scouting_image(data, selected_team, players)
+                    if full_img:
+                        import base64
+                        b64 = base64.b64encode(full_img).decode()
+                        st.html(f'<img src="data:image/png;base64,{b64}" style="width:100%;height:auto;">')
 
-                        # Per-player image download
-                        player_img = generate_player_image(data, p["steam_id"])
-                        if player_img:
+                        # Upload to GCS for shareable link
+                        try:
+                            from user_manager import _get_fs, BUCKET
+                            gcs_path = f"{BUCKET}/scouting_images/{selected_team.replace(' ', '_')}_full.png"
+                            fs = _get_fs()
+                            with fs.open(gcs_path, "wb") as f:
+                                f.write(full_img)
+                            gcs_url = f"https://storage.googleapis.com/{gcs_path}"
+                        except Exception:
+                            gcs_url = None
+
+                        col_dl, col_open, _ = st.columns([1, 1, 3])
+                        with col_dl:
                             st.download_button(
-                                f"🖼️ Download {name} image",
-                                data=player_img,
-                                file_name=f"scouting_{name.replace(' ', '_')}.png",
+                                "🖼️ Download image",
+                                data=full_img,
+                                file_name=f"scouting_{selected_team.replace(' ', '_')}_full.png",
                                 mime="image/png",
-                                key=f"img_player_{sid}_{fetched_ts}",
+                                key=f"img_full_{fetched_ts}",
+                            )
+                        with col_open:
+                            if gcs_url:
+                                st.link_button("🔎 Open in new tab", gcs_url)
+
+                    st.markdown("---")
+                    st.subheader("Player Hero Pools (Past 2 Months)")
+
+                    for p in players:
+                        sid = normalize_steam_id(p["steam_id"])
+                        name = data["player_names"].get(sid, str(sid))
+                        hero_df = data.get("player_heroes", {}).get(sid, pd.DataFrame())
+
+                        dotabuff = f"https://www.dotabuff.com/players/{sid}"
+                        stratz_url = f"https://stratz.com/players/{sid}"
+                        opendota = f"https://www.opendota.com/players/{sid}"
+
+                        with st.expander(f"**{name}** (ID: {sid})", expanded=True):
+                            st.markdown(
+                                f"[Dotabuff]({dotabuff}) · [Stratz]({stratz_url}) · [OpenDota]({opendota})"
                             )
 
-                st.markdown("---")
-                st.subheader("Team Games (Past 2 Months)")
-                team_games = data.get("team_games", pd.DataFrame())
-                if team_games.empty:
-                    st.info("No games found where team members played together.")
-                else:
-                    display_games = team_games.head(15)
-                    st.caption(f"Showing {len(display_games)} of {len(team_games)} games with 2+ team members on the same side.")
-                    st.dataframe(
-                        display_games,
-                        hide_index=True,
-                        use_container_width=True,
-                    )
+                            if hero_df.empty:
+                                st.warning("No matches found — profile may be private.")
+                            else:
+                                st.markdown(f"**Heroes played in the past 2 months ({len(hero_df)} heroes):**")
+                                st.dataframe(
+                                    hero_df,
+                                    column_config={
+                                        "Icon": st.column_config.ImageColumn("", width="small"),
+                                        "Winrate": st.column_config.NumberColumn(format="%.1f%%"),
+                                    },
+                                    hide_index=True,
+                                    width="stretch",
+                                )
 
-                    # Team games image download
-                    team_img = generate_team_games_image(data, selected_team)
-                    if team_img:
-                        st.download_button(
-                            "🖼️ Download Team Games image",
-                            data=team_img,
-                            file_name=f"scouting_{selected_team.replace(' ', '_')}_team_games.png",
-                            mime="image/png",
-                            key=f"img_team_{fetched_ts}",
+                            # Per-player image download
+                            player_img = generate_player_image(data, p["steam_id"])
+                            if player_img:
+                                st.download_button(
+                                    f"🖼️ Download {name} image",
+                                    data=player_img,
+                                    file_name=f"scouting_{name.replace(' ', '_')}.png",
+                                    mime="image/png",
+                                    key=f"img_player_{sid}_{fetched_ts}",
+                                )
+
+                    st.markdown("---")
+                    st.subheader("Team Games (Past 2 Months)")
+                    team_games = data.get("team_games", pd.DataFrame())
+                    if team_games.empty:
+                        st.info("No games found where team members played together.")
+                    else:
+                        display_games = team_games.head(15)
+                        st.caption(f"Showing {len(display_games)} of {len(team_games)} games with 2+ team members on the same side.")
+                        st.dataframe(
+                            display_games,
+                            hide_index=True,
+                            width="stretch",
                         )
 
-                # --- Tournament Drafts (5-player games) ---
-                scout_drafts = data.get("drafts", [])
-                if scout_drafts:
-                    st.markdown("---")
-                    st.subheader(f"Tournament Drafts — Full Team ({len(scout_drafts)} games)")
-                    for draft in scout_drafts:
-                        winner_label = "🏆 " + draft["winner"]
-                        label = f"{draft['radiant']} vs {draft['dire']} — {winner_label} — {draft['date']}"
-                        with st.expander(label):
-                            html = draft_to_html(draft)
-                            st.html(html)
+                        # Team games image download
+                        team_img = generate_team_games_image(data, selected_team)
+                        if team_img:
+                            st.download_button(
+                                "🖼️ Download Team Games image",
+                                data=team_img,
+                                file_name=f"scouting_{selected_team.replace(' ', '_')}_team_games.png",
+                                mime="image/png",
+                                key=f"img_team_{fetched_ts}",
+                            )
+
+                    # --- Tournament Drafts (5-player games) ---
+                    scout_drafts = data.get("drafts", [])
+                    if scout_drafts:
+                        st.markdown("---")
+                        st.subheader(f"Tournament Drafts — Full Team ({len(scout_drafts)} games)")
+                        for draft in scout_drafts:
+                            winner_label = "🏆 " + draft["winner"]
+                            label = f"{draft['radiant']} vs {draft['dire']} — {winner_label} — {draft['date']}"
+                            with st.expander(label):
+                                html = draft_to_html(draft)
+                                st.html(html)
+
+        _scouting_fragment()
