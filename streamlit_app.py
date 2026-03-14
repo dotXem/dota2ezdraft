@@ -10,7 +10,7 @@ from st_files_connection import FilesConnection
 from hero_suggestion import *
 import streamlit_authenticator as stauth
 from user_manager import load_config, save_config, get_user_heroes, register_user, change_password, save_hero_list, delete_hero_list, is_scouting_user, get_scouting_teams, save_scouting_team, delete_scouting_team
-from scouting_api import fetch_all_scouting_data, normalize_steam_id, generate_scouting_markdown, generate_player_markdown, generate_team_games_markdown, generate_player_image, generate_team_games_image, generate_full_scouting_image
+from scouting_api import fetch_all_scouting_data, normalize_steam_id, generate_player_image, generate_team_games_image, generate_full_scouting_image, get_hero_icon_url
 
 st.sidebar.header("User")
 
@@ -189,7 +189,10 @@ def display_hero_suggestions(winrates_series, counter_scores_df, synergy_scores_
         *ally_heroes
     ]]
 
-    all_winrate_columns = suggestions_df.columns.difference(["relevance", "impact"])
+    # Add hero icon column
+    suggestions_df.insert(0, "Icon", suggestions_df.index.map(lambda h: get_hero_icon_url(h) or ""))
+
+    all_winrate_columns = suggestions_df.columns.difference(["relevance", "impact", "Icon"])
     suggestions_df.loc[:, all_winrate_columns] = suggestions_df.loc[:, all_winrate_columns] * 100
     
     def hero_color_coding(row):
@@ -210,6 +213,9 @@ def display_hero_suggestions(winrates_series, counter_scores_df, synergy_scores_
     st.dataframe(
         suggestions_df, 
         height=1000,
+        column_config={
+            "Icon": st.column_config.ImageColumn("", width="small"),
+        },
     )
 
 show_scouting = authentication_status and is_scouting_user(config, username)
@@ -431,11 +437,6 @@ if show_scouting:
                 data = st.session_state[scout_key]
                 fetched_ts = data.get("fetched_at", "")
 
-                # Full report copy
-                md_full = generate_scouting_markdown(data, selected_team, players)
-                with st.expander("📋 Full markdown report (click copy icon →)"):
-                    st.code(md_full, language="markdown")
-
                 # Full composite image download
                 full_img = generate_full_scouting_image(data, selected_team, players)
                 if full_img:
@@ -471,15 +472,12 @@ if show_scouting:
                             st.dataframe(
                                 hero_df,
                                 column_config={
+                                    "Icon": st.column_config.ImageColumn("", width="small"),
                                     "Winrate": st.column_config.NumberColumn(format="%.1f%%"),
                                 },
                                 hide_index=True,
                                 use_container_width=True,
                             )
-
-                        # Per-player copy button
-                        player_md = generate_player_markdown(data, p["steam_id"])
-                        st.code(player_md, language="markdown")
 
                         # Per-player image download
                         player_img = generate_player_image(data, p["steam_id"])
@@ -504,10 +502,6 @@ if show_scouting:
                         hide_index=True,
                         use_container_width=True,
                     )
-
-                    # Team games copy button
-                    team_md = generate_team_games_markdown(data, selected_team)
-                    st.code(team_md, language="markdown")
 
                     # Team games image download
                     team_img = generate_team_games_image(data, selected_team)

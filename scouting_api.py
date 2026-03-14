@@ -146,6 +146,7 @@ def compute_player_hero_stats(matches, steam_id):
         winrate = round(s["wins"] / s["games"] * 100, 1) if s["games"] else 0.0
         last_dt = datetime.datetime.utcfromtimestamp(s["last_played"])
         rows.append({
+            "Icon": get_hero_icon_url(hero_name) or "",
             "Hero": hero_name,
             "Games": s["games"],
             "Wins": s["wins"],
@@ -360,6 +361,16 @@ _hero_icon_cache = {}
 _hero_shortnames = None
 
 HERO_ICON_CDN = "https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/heroes/{slug}.png"
+
+
+def get_hero_icon_url(hero_name):
+    """Return CDN icon URL for a hero name, or None."""
+    shortnames = _get_hero_shortnames()
+    hero_id = STRATZ_HERO_TO_ID.get(hero_name)
+    slug = shortnames.get(hero_id) if hero_id else None
+    if slug:
+        return HERO_ICON_CDN.format(slug=slug)
+    return None
 
 
 def _get_hero_shortnames():
