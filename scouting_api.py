@@ -58,6 +58,14 @@ def fetch_player_data(session, steam_id):
           didRadiantWin
           lobbyType
           leagueId
+          radiantTeam { name }
+          direTeam { name }
+          pickBans {
+            isPick
+            heroId
+            order
+            isRadiant
+          }
           players {
             steamAccountId
             heroId
@@ -94,6 +102,14 @@ def fetch_player_data(session, steam_id):
               didRadiantWin
               lobbyType
               leagueId
+              radiantTeam { name }
+              direTeam { name }
+              pickBans {
+                isPick
+                heroId
+                order
+                isRadiant
+              }
               players {
                 steamAccountId
                 heroId
@@ -249,10 +265,81 @@ def find_team_games(all_player_matches, steam_ids, player_names):
     return df
 
 
+def build_scouting_drafts(all_player_matches, steam_ids):
+    """
+    Find tournament games where all 5 players played on the same side
+    and build draft dicts (same format as pro_meta_api.build_draft_table).
+    """
+    matches_by_id = {}
+    for sid, matches in all_player_matches.items():
+        for m in matches:
+            mid = m["id"]
+            if mid not in matches_by_id:
+                matches_by_id[mid] = m
+
+    steam_set = set(steam_ids)
+    drafts = []
+
+    for mid, match in matches_by_id.items():
+        if not match.get("leagueId"):
+            continue
+        if not match.get("pickBans"):
+            continue
+
+        team_in_match = []
+        for p in match.get("players") or []:
+            if p["steamAccountId"] in steam_set:
+                team_in_match.append(p)
+
+        radiant = [p for p in team_in_match if p["isRadiant"]]
+        dire = [p for p in team_in_match if not p["isRadiant"]]
+        if len(radiant) >= len(dire):
+            side_players = radiant
+        else:
+            side_players = dire
+
+        if len(side_players) < 5:
+            continue
+
+        ts = match.get("startDateTime", 0)
+        dt = datetime.datetime.fromtimestamp(ts, tz=datetime.timezone.utc)
+        rad_team = (match.get("radiantTeam") or {}).get("name", "Radiant")
+        dire_team = (match.get("direTeam") or {}).get("name", "Dire")
+        rad_win = match.get("didRadiantWin")
+        winner = rad_team if rad_win else dire_team
+
+        pick_bans = sorted(match.get("pickBans") or [], key=lambda x: x.get("order", 0))
+        actions = []
+        for pb in pick_bans:
+            hid = pb.get("heroId")
+            hero_name = STRATZ_ID_TO_HERO.get(hid, f"?{hid}")
+            icon = get_hero_icon_url(hero_name) or ""
+            actions.append({
+                "order": pb["order"],
+                "type": "Pick" if pb["isPick"] else "Ban",
+                "hero": hero_name,
+                "icon": icon,
+                "side": "Radiant" if pb["isRadiant"] else "Dire",
+                "team": rad_team if pb["isRadiant"] else dire_team,
+            })
+
+        drafts.append({
+            "match_id": mid,
+            "date": dt.strftime("%Y-%m-%d %H:%M"),
+            "radiant": rad_team,
+            "dire": dire_team,
+            "winner": winner,
+            "actions": actions,
+        })
+
+    drafts.sort(key=lambda d: d["date"], reverse=True)
+    return drafts
+
+
 def fetch_all_scouting_data(team_players):
     """
     Fetch complete scouting data for a team.
-    Returns dict with player_names, player_heroes, team_games, and fetched_at.
+    Returns dict with player_names, player_heroes, team_games, drafts, and fetched_at.
     """
     session = requests.Session()
     steam_ids = [normalize_steam_id(p["steam_id"]) for p in team_players]
@@ -283,11 +370,13 @@ def fetch_all_scouting_data(team_players):
         player_heroes[sid] = compute_player_hero_stats(merged_matches[sid], sid)
 
     team_games = find_team_games(all_matches, steam_ids, player_names)
+    drafts = build_scouting_drafts(all_matches, steam_ids)
 
     return {
         "player_names": player_names,
         "player_heroes": player_heroes,
         "team_games": team_games,
+        "drafts": drafts,
         "fetched_at": datetime.datetime.utcnow().isoformat(),
     }
 
@@ -360,7 +449,7 @@ def generate_scouting_markdown(data, team_name, players):
 _hero_icon_cache = {}
 _hero_shortnames = None
 
-HERO_ICON_CDN = "https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/heroes/{slug}.png"
+HERO_ICON_CDN = "https://storage.googleapis.com/heroes-ezdraft/icons/{slug}.png"
 
 
 def get_hero_icon_url(hero_name):
@@ -393,8 +482,9 @@ def _get_hero_icon(hero_name, size=32):
     """Download and cache a hero icon as a PIL Image."""
     from PIL import Image
 
-    if hero_name in _hero_icon_cache:
-        return _hero_icon_cache[hero_name]
+    cache_key = (hero_name, size)
+    if cache_key in _hero_icon_cache:
+        return _hero_icon_cache[cache_key]
 
     shortnames = _get_hero_shortnames()
     hero_id = STRATZ_HERO_TO_ID.get(hero_name)
@@ -415,7 +505,7 @@ def _get_hero_icon(hero_name, size=32):
         except Exception:
             pass
 
-    _hero_icon_cache[hero_name] = img
+    _hero_icon_cache[cache_key] = img
     return img
 
 
@@ -486,16 +576,16 @@ def generate_player_image(data, steam_id):
     df = df.head(15)
 
     # Layout constants
-    ICON_SIZE = 32
-    ROW_H = 38
-    PAD = 12
-    HEADER_H = 50
-    COL_ICON_W = 64
-    COL_HERO_W = 160
-    COL_GAMES_W = 60
-    COL_WINS_W = 60
-    COL_WR_W = 70
-    COL_LAST_W = 100
+    ICON_SIZE = 48
+    ROW_H = 56
+    PAD = 18
+    HEADER_H = 72
+    COL_ICON_W = 96
+    COL_HERO_W = 240
+    COL_GAMES_W = 90
+    COL_WINS_W = 90
+    COL_WR_W = 105
+    COL_LAST_W = 150
     COLS = [COL_ICON_W, COL_HERO_W, COL_GAMES_W, COL_WINS_W, COL_WR_W, COL_LAST_W]
     TABLE_W = sum(COLS)
     IMG_W = TABLE_W + 2 * PAD
@@ -506,9 +596,9 @@ def generate_player_image(data, steam_id):
     draw = ImageDraw.Draw(img)
 
     try:
-        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 13)
-        font_bold = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 13)
-        font_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 16)
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 20)
+        font_bold = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 20)
+        font_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 24)
     except OSError:
         font = ImageFont.load_default()
         font_bold = font
@@ -523,7 +613,7 @@ def generate_player_image(data, steam_id):
     x = PAD
     draw.rectangle([PAD, y, PAD + TABLE_W, y + ROW_H], fill="#16213e")
     for i, hdr in enumerate(headers):
-        draw.text((x + 4, y + 10), hdr, fill="#e0e0e0", font=font_bold)
+        draw.text((x + 6, y + 16), hdr, fill="#e0e0e0", font=font_bold)
         x += COLS[i]
 
     # Rows
@@ -538,29 +628,29 @@ def generate_player_image(data, steam_id):
         hero_icon = _get_hero_icon(row["Hero"], ICON_SIZE)
         if hero_icon:
             icon_y = y + (ROW_H - ICON_SIZE) // 2
-            img.paste(hero_icon, (x + 4, icon_y), hero_icon)
+            img.paste(hero_icon, (x + 6, icon_y), hero_icon)
         x += COLS[0]
 
         # Hero name
-        draw.text((x + 4, y + 10), str(row["Hero"]), fill="#e0e0e0", font=font)
+        draw.text((x + 6, y + 16), str(row["Hero"]), fill="#e0e0e0", font=font)
         x += COLS[1]
 
         # Games
-        draw.text((x + 4, y + 10), str(int(row["Games"])), fill="#e0e0e0", font=font)
+        draw.text((x + 6, y + 16), str(int(row["Games"])), fill="#e0e0e0", font=font)
         x += COLS[2]
 
         # Wins
-        draw.text((x + 4, y + 10), str(int(row["Wins"])), fill="#e0e0e0", font=font)
+        draw.text((x + 6, y + 16), str(int(row["Wins"])), fill="#e0e0e0", font=font)
         x += COLS[3]
 
         # Winrate with color
         wr = row["Winrate"]
         wr_color = "#4ecca3" if wr >= 50 else "#e84545"
-        draw.text((x + 4, y + 10), f"{wr:.1f}%", fill=wr_color, font=font_bold)
+        draw.text((x + 6, y + 16), f"{wr:.1f}%", fill=wr_color, font=font_bold)
         x += COLS[4]
 
         # Last played
-        draw.text((x + 4, y + 10), str(row["Last Played"]), fill="#b0b0b0", font=font)
+        draw.text((x + 6, y + 16), str(row["Last Played"]), fill="#b0b0b0", font=font)
 
     buf = io.BytesIO()
     img.save(buf, format="PNG")
@@ -576,16 +666,19 @@ def generate_team_games_image(data, team_name):
     if team_games.empty:
         return None
 
+    # Prioritize 3+ player games and limit to 15
+    team_games = team_games.head(15)
+
     # Layout constants
-    ICON_SIZE = 24
-    ROW_H = 32
-    PAD = 12
-    HEADER_H = 50
-    COL_DATE_W = 120
-    COL_TOUR_W = 40
-    COL_NPLAY_W = 25
-    COL_POS_W = 210  # each position column — icon + player name + hero name
-    COL_RESULT_W = 50
+    ICON_SIZE = 36
+    ROW_H = 48
+    PAD = 18
+    HEADER_H = 72
+    COL_DATE_W = 180
+    COL_TOUR_W = 60
+    COL_NPLAY_W = 38
+    COL_POS_W = 315  # each position column — icon + player name + hero name
+    COL_RESULT_W = 75
     COLS = [COL_DATE_W, COL_TOUR_W, COL_NPLAY_W] + [COL_POS_W] * 5 + [COL_RESULT_W]
     TABLE_W = sum(COLS)
     IMG_W = TABLE_W + 2 * PAD
@@ -596,9 +689,9 @@ def generate_team_games_image(data, team_name):
     draw = ImageDraw.Draw(img)
 
     try:
-        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 11)
-        font_bold = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 11)
-        font_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 14)
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 16)
+        font_bold = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 16)
+        font_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 21)
     except OSError:
         font = ImageFont.load_default()
         font_bold = font
@@ -613,7 +706,7 @@ def generate_team_games_image(data, team_name):
     x = PAD
     draw.rectangle([PAD, y, PAD + TABLE_W, y + ROW_H], fill="#16213e")
     for i, hdr in enumerate(headers):
-        draw.text((x + 4, y + 8), hdr, fill="#e0e0e0", font=font_bold)
+        draw.text((x + 6, y + 12), hdr, fill="#e0e0e0", font=font_bold)
         x += COLS[i]
 
     pos_cols = ["Pos 1", "Pos 2", "Pos 3", "Pos 4", "Pos 5"]
@@ -626,17 +719,17 @@ def generate_team_games_image(data, team_name):
 
         x = PAD
         # Date
-        draw.text((x + 4, y + 8), str(row["Date"]), fill="#e0e0e0", font=font)
+        draw.text((x + 6, y + 12), str(row["Date"]), fill="#e0e0e0", font=font)
         x += COLS[0]
 
         # Tournament
         tour_val = str(row.get("Tournament", ""))
         if tour_val and tour_val not in ("", "nan"):
-            draw.text((x + 4, y + 8), "Yes", fill="#f0c040", font=font_bold)
+            draw.text((x + 6, y + 12), "Yes", fill="#f0c040", font=font_bold)
         x += COLS[1]
 
         # # Players
-        draw.text((x + 4, y + 8), str(int(row["# Players"])), fill="#e0e0e0", font=font)
+        draw.text((x + 6, y + 12), str(int(row["# Players"])), fill="#e0e0e0", font=font)
         x += COLS[2]
 
         # Position columns — show icon + name
@@ -651,18 +744,120 @@ def generate_team_games_image(data, team_name):
                 hero_icon = _get_hero_icon(hero_name, ICON_SIZE) if hero_name else None
                 if hero_icon:
                     icon_y = y + (ROW_H - ICON_SIZE) // 2
-                    img.paste(hero_icon, (x + 2, icon_y), hero_icon)
+                    img.paste(hero_icon, (x + 3, icon_y), hero_icon)
                     # Show player name (without hero) after icon
                     player_part = val[:val.rfind("(")].strip()
-                    draw.text((x + ICON_SIZE + 6, y + 8), player_part, fill="#e0e0e0", font=font)
+                    draw.text((x + ICON_SIZE + 8, y + 12), player_part, fill="#e0e0e0", font=font)
                 else:
-                    draw.text((x + 4, y + 8), val, fill="#e0e0e0", font=font)
+                    draw.text((x + 6, y + 12), val, fill="#e0e0e0", font=font)
             x += COL_POS_W
 
         # Result
         result = str(row.get("Result", ""))
         r_color = "#4ecca3" if result == "Won" else "#e84545" if result == "Lost" else "#e0e0e0"
-        draw.text((x + 4, y + 8), result, fill=r_color, font=font_bold)
+        draw.text((x + 6, y + 12), result, fill=r_color, font=font_bold)
+
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    return buf.getvalue()
+
+
+def generate_drafts_image(data, team_name):
+    """Generate a PNG image showing tournament drafts with colored hero icons."""
+    from PIL import Image, ImageDraw, ImageFont
+
+    drafts = data.get("drafts", [])
+    if not drafts:
+        return None
+
+    # Limit to 15 most recent drafts
+    drafts = drafts[:15]
+
+    ICON_W = 82
+    ICON_H = 46
+    CELL_W = ICON_W + 12
+    CELL_H = ICON_H + 12
+    PAD = 18
+    HEADER_H = 72
+    MATCH_GAP = 10
+    TEAM_COL_W = 210
+    SIDE_COL_W = 100
+    MAX_ACTIONS = max((max((a["order"] for a in d["actions"]), default=-1) + 1 for d in drafts), default=24)
+
+    TABLE_W = TEAM_COL_W + SIDE_COL_W + MAX_ACTIONS * CELL_W
+    IMG_W = TABLE_W + 2 * PAD
+
+    # Each draft: match header (20px) + 2 team rows
+    MATCH_HEADER_H = 34
+    DRAFT_H = MATCH_HEADER_H + 2 * CELL_H
+    IMG_H = HEADER_H + len(drafts) * (DRAFT_H + MATCH_GAP) + PAD
+
+    img = Image.new("RGB", (IMG_W, IMG_H), "#1a1a2e")
+    draw = ImageDraw.Draw(img)
+
+    try:
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 16)
+        font_bold = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 16)
+        font_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 21)
+        font_small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 14)
+    except OSError:
+        font = ImageFont.load_default()
+        font_bold = font
+        font_title = font
+        font_small = font
+
+    draw.text((PAD, PAD), f"{team_name} — Tournament Drafts", fill="#e0e0e0", font=font_title)
+
+    PICK_BG = (46, 125, 50)   # green
+    BAN_BG = (198, 40, 40)    # red
+    EMPTY_BG = (26, 26, 46)   # match background
+    HIGHLIGHT_NAME_BG = (30, 60, 110)  # brighter bg for team of interest
+    DEFAULT_NAME_BG = (22, 33, 62)     # #16213e
+
+    y = HEADER_H
+    for draft in drafts:
+        # Match header
+        winner_str = "\U0001f3c6 " + draft["winner"]
+        label = f"{draft['radiant']} vs {draft['dire']} — {winner_str} — {draft['date']}"
+        draw.text((PAD, y + 5), label, fill="#c0c0c0", font=font_small)
+        y += MATCH_HEADER_H
+
+        actions_by_order = {a["order"]: a for a in draft["actions"]}
+
+        for team_name_row, side in [(draft["radiant"], "Radiant"), (draft["dire"], "Dire")]:
+            is_our_team = team_name_row.strip().lower() == team_name.strip().lower()
+            name_bg = HIGHLIGHT_NAME_BG if is_our_team else DEFAULT_NAME_BG
+            name_color = "#f0c040" if is_our_team else "#e0e0e0"
+            x = PAD
+            # Team name
+            draw.rectangle([x, y, x + TEAM_COL_W, y + CELL_H], fill=name_bg)
+            draw.text((x + 6, y + 12), team_name_row[:22], fill=name_color, font=font_bold)
+            x += TEAM_COL_W
+
+            # Side
+            draw.rectangle([x, y, x + SIDE_COL_W, y + CELL_H], fill=name_bg)
+            draw.text((x + 6, y + 12), side, fill=name_color, font=font)
+            x += SIDE_COL_W
+
+            # Draft cells
+            for i in range(MAX_ACTIONS):
+                a = actions_by_order.get(i)
+                if a and a["side"] == side:
+                    bg = PICK_BG if a["type"] == "Pick" else BAN_BG
+                    draw.rectangle([x, y, x + CELL_W, y + CELL_H], fill=bg)
+                    hero_icon = _get_hero_icon(a["hero"], ICON_H)
+                    if hero_icon:
+                        ix = x + (CELL_W - hero_icon.width) // 2
+                        iy = y + (CELL_H - ICON_H) // 2
+                        img.paste(hero_icon, (ix, iy), hero_icon)
+                else:
+                    draw.rectangle([x, y, x + CELL_W, y + CELL_H], fill=EMPTY_BG)
+                x += CELL_W
+
+            y += CELL_H
+
+        y += MATCH_GAP
 
     buf = io.BytesIO()
     img.save(buf, format="PNG")
@@ -671,7 +866,7 @@ def generate_team_games_image(data, team_name):
 
 
 def generate_full_scouting_image(data, team_name, players):
-    """Generate a single composite image: team games on top, all players side by side below."""
+    """Generate a single composite image: team games + drafts on top, all players side by side below."""
     from PIL import Image
 
     player_imgs = []
@@ -685,30 +880,43 @@ def generate_full_scouting_image(data, team_name, players):
     if team_bytes:
         team_img = Image.open(io.BytesIO(team_bytes))
 
-    if not player_imgs and not team_img:
+    drafts_img = None
+    drafts_bytes = generate_drafts_image(data, team_name)
+    if drafts_bytes:
+        drafts_img = Image.open(io.BytesIO(drafts_bytes))
+
+    if not player_imgs and not team_img and not drafts_img:
         return None
 
     GAP = 10
 
-    # All players on one row
+    # Top row: team games and drafts side by side
+    top_imgs = [im for im in [team_img, drafts_img] if im is not None]
+    top_w = sum(im.width for im in top_imgs) + GAP * max(len(top_imgs) - 1, 0) if top_imgs else 0
+    top_h = max((im.height for im in top_imgs), default=0)
+
+    # Bottom row: all players side by side
     players_w = sum(im.width for im in player_imgs) + GAP * max(len(player_imgs) - 1, 0) if player_imgs else 0
     players_h = max((im.height for im in player_imgs), default=0)
 
-    total_w = max(players_w, team_img.width if team_img else 0)
+    total_w = max(top_w, players_w)
     total_h = 0
-    if team_img:
-        total_h += team_img.height + GAP
+    if top_imgs:
+        total_h += top_h + GAP
     total_h += players_h
 
     composite = Image.new("RGB", (total_w, total_h), "#1a1a2e")
 
     y = 0
-    # Team games at the top
-    if team_img:
-        composite.paste(team_img, (0, y))
-        y += team_img.height + GAP
+    # Top row: team games + drafts side by side
+    x = 0
+    for im in top_imgs:
+        composite.paste(im, (x, y))
+        x += im.width + GAP
+    if top_imgs:
+        y += top_h + GAP
 
-    # All players side by side
+    # Bottom row: all players side by side
     x = 0
     for im in player_imgs:
         composite.paste(im, (x, y))
