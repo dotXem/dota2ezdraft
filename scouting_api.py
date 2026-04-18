@@ -463,18 +463,32 @@ def get_hero_icon_url(hero_name):
 
 
 def _get_hero_shortnames():
-    """Fetch hero id→shortName mapping from Stratz (cached)."""
+    """Fetch hero id→shortName mapping (local file first, Stratz API fallback)."""
     global _hero_shortnames
     if _hero_shortnames is not None:
         return _hero_shortnames
+    # Try local file first (works on Cloud Run where Stratz is blocked)
+    try:
+        import yaml, os
+        path = os.path.join(os.path.dirname(__file__), "hero_shortnames.yaml")
+        with open(path) as f:
+            _hero_shortnames = yaml.safe_load(f)
+        if _hero_shortnames:
+            return _hero_shortnames
+    except Exception:
+        pass
+    # Fallback to Stratz API
     try:
         q = '{constants { heroes { id shortName } }}'
         payload = json.dumps({"query": q})
         r = requests.post(STRATZ_API_URL, headers=HEADERS, data=payload, timeout=10)
+        r.raise_for_status()
         heroes = r.json()["data"]["constants"]["heroes"]
         _hero_shortnames = {h["id"]: h["shortName"] for h in heroes}
-    except Exception:
-        _hero_shortnames = {}
+    except Exception as e:
+        import logging
+        logging.error(f"_get_hero_shortnames failed: {e}")
+        return {}  # Don't cache failures — retry on next call
     return _hero_shortnames
 
 

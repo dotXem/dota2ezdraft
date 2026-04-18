@@ -322,120 +322,125 @@ with lists_tab:
             st.info("No custom lists yet. Create one above!")
 
 with meta_tab:
-    st.subheader("Pro Meta — Tournament Hero Stats")
 
-    # Fetch league list (cached in session state)
-    if "pro_meta_leagues" not in st.session_state:
-        st.session_state.pro_meta_leagues = None
+    @st.fragment
+    def _meta_fragment():
+        st.subheader("Pro Meta — Tournament Hero Stats")
 
-    if st.button("Load recent tournaments", key="meta_load_leagues"):
-        with st.spinner("Fetching tournament list from OpenDota..."):
-            try:
-                st.session_state.pro_meta_leagues = fetch_recent_leagues(count=20)
-            except Exception as e:
-                st.error(f"Error fetching leagues: {e}")
+        # Fetch league list (cached in session state)
+        if "pro_meta_leagues" not in st.session_state:
+            st.session_state.pro_meta_leagues = None
 
-    leagues = st.session_state.pro_meta_leagues
-
-    # --- League selection: dropdown or manual ID ---
-    selected_league_id = None
-    col_sel, col_manual = st.columns([3, 1])
-    with col_sel:
-        if leagues:
-            league_options = {
-                f"{l['name']} — {l['match_count']} games ({l['last_match']})": l["id"]
-                for l in leagues
-            }
-            selected_league_label = st.selectbox(
-                "Select tournament", list(league_options.keys()), key="meta_league_sel"
-            )
-            selected_league_id = league_options[selected_league_label]
-        else:
-            st.info("Click **Load recent tournaments** to populate the list, or enter a League ID manually.")
-
-    with col_manual:
-        manual_id = st.text_input("Or enter League ID", key="meta_manual_id", placeholder="e.g. 19269")
-        if manual_id.strip():
-            try:
-                selected_league_id = int(manual_id.strip())
-            except ValueError:
-                st.error("Invalid ID")
-
-    if selected_league_id:
-        meta_key = f"pro_meta_data_{selected_league_id}"
-
-        if meta_key in st.session_state:
-            fetched_at = st.session_state[meta_key].get("fetched_at", "")
-            if fetched_at:
-                import datetime as _dt
+        if st.button("Load recent tournaments", key="meta_load_leagues"):
+            with st.spinner("Fetching tournament list from OpenDota..."):
                 try:
-                    ft = _dt.datetime.fromisoformat(fetched_at)
-                    delta = _dt.datetime.utcnow() - ft
-                    hours = delta.total_seconds() / 3600
-                    if hours < 1:
-                        age_str = f"{int(delta.total_seconds() / 60)} minutes ago"
-                    else:
-                        age_str = f"{hours:.1f} hours ago"
-                    st.caption(f"📦 Data cached — last fetched {age_str}")
-                except ValueError:
-                    pass
-
-        if st.button("Fetch tournament data", type="primary", key="meta_fetch_btn"):
-            # Look up league name for display (especially for manual IDs)
-            league_info = lookup_league_info(selected_league_id)
-            league_name = league_info.get("name", f"League {selected_league_id}")
-
-            with st.spinner(f"Fetching {league_name} matches..."):
-                try:
-                    result = fetch_pro_meta(selected_league_id)
-                    st.session_state[meta_key] = result
-                    st.success(f"Fetched {result['total_matches']} matches for {league_name}!")
+                    st.session_state.pro_meta_leagues = fetch_recent_leagues(count=20)
                 except Exception as e:
-                    st.error(f"Error: {e}")
+                    st.error(f"Error fetching leagues: {e}")
 
-        if meta_key in st.session_state:
-            meta_data = st.session_state[meta_key]
-            hero_stats = meta_data["hero_stats"]
-            drafts = meta_data["drafts"]
-            total_matches = meta_data["total_matches"]
+        leagues = st.session_state.pro_meta_leagues
 
-            st.markdown(f"**{total_matches} matches** in this tournament")
-            st.markdown("---")
-
-            # --- Hero Contest Stats ---
-            st.subheader("Hero Contest Stats")
-            if not hero_stats.empty:
-                display_stats = hero_stats
-                # Hide Pos columns when position data is unavailable (all zeros)
-                pos_cols = [c for c in display_stats.columns if c.startswith("Pos ")]
-                if pos_cols and display_stats[pos_cols].sum().sum() == 0:
-                    display_stats = display_stats.drop(columns=pos_cols)
-                st.dataframe(
-                    display_stats,
-                    column_config={
-                        "Icon": st.column_config.ImageColumn("", width="small"),
-                        "Winrate": st.column_config.NumberColumn(format="%.1f%%"),
-                        "Pick%": st.column_config.NumberColumn(format="%.1f%%"),
-                        "Ban%": st.column_config.NumberColumn(format="%.1f%%"),
-                        "Contest%": st.column_config.NumberColumn(format="%.1f%%"),
-                    },
-                    hide_index=True,
-                    width="stretch",
-                    height=800,
+        # --- League selection: dropdown or manual ID ---
+        selected_league_id = None
+        col_sel, col_manual = st.columns([3, 1])
+        with col_sel:
+            if leagues:
+                league_options = {
+                    f"{l['name']} — {l['match_count']} games ({l['last_match']})": l["id"]
+                    for l in leagues
+                }
+                selected_league_label = st.selectbox(
+                    "Select tournament", list(league_options.keys()), key="meta_league_sel"
                 )
+                selected_league_id = league_options[selected_league_label]
             else:
-                st.info("No hero data available.")
+                st.info("Click **Load recent tournaments** to populate the list, or enter a League ID manually.")
 
-            st.markdown("---")
+        with col_manual:
+            manual_id = st.text_input("Or enter League ID", key="meta_manual_id", placeholder="e.g. 19269")
+            if manual_id.strip():
+                try:
+                    selected_league_id = int(manual_id.strip())
+                except ValueError:
+                    st.error("Invalid ID")
 
-            # --- Recent Drafts ---
-            st.subheader(f"Recent Drafts (last {len(drafts)} games)")
-            for draft in drafts:
-                winner_label = "🏆 " + draft["winner"]
-                label = f"{draft['radiant']} vs {draft['dire']} — {winner_label} — {draft['date']}"
-                with st.expander(label):
-                    html = draft_to_html(draft)
-                    st.html(html)
+        if selected_league_id:
+            meta_key = f"pro_meta_data_{selected_league_id}"
+
+            if meta_key in st.session_state:
+                fetched_at = st.session_state[meta_key].get("fetched_at", "")
+                if fetched_at:
+                    import datetime as _dt
+                    try:
+                        ft = _dt.datetime.fromisoformat(fetched_at)
+                        delta = _dt.datetime.utcnow() - ft
+                        hours = delta.total_seconds() / 3600
+                        if hours < 1:
+                            age_str = f"{int(delta.total_seconds() / 60)} minutes ago"
+                        else:
+                            age_str = f"{hours:.1f} hours ago"
+                        st.caption(f"📦 Data cached — last fetched {age_str}")
+                    except ValueError:
+                        pass
+
+            if st.button("Fetch tournament data", type="primary", key="meta_fetch_btn"):
+                # Look up league name for display (especially for manual IDs)
+                league_info = lookup_league_info(selected_league_id)
+                league_name = league_info.get("name", f"League {selected_league_id}")
+
+                with st.spinner(f"Fetching {league_name} matches..."):
+                    try:
+                        result = fetch_pro_meta(selected_league_id)
+                        st.session_state[meta_key] = result
+                        st.success(f"Fetched {result['total_matches']} matches for {league_name}!")
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+
+            if meta_key in st.session_state:
+                meta_data = st.session_state[meta_key]
+                hero_stats = meta_data["hero_stats"]
+                drafts = meta_data["drafts"]
+                total_matches = meta_data["total_matches"]
+
+                st.markdown(f"**{total_matches} matches** in this tournament")
+                st.markdown("---")
+
+                # --- Hero Contest Stats ---
+                st.subheader("Hero Contest Stats")
+                if not hero_stats.empty:
+                    display_stats = hero_stats
+                    # Hide Pos columns when position data is unavailable (all zeros)
+                    pos_cols = [c for c in display_stats.columns if c.startswith("Pos ")]
+                    if pos_cols and display_stats[pos_cols].sum().sum() == 0:
+                        display_stats = display_stats.drop(columns=pos_cols)
+                    st.dataframe(
+                        display_stats,
+                        column_config={
+                            "Icon": st.column_config.ImageColumn("", width="small"),
+                            "Winrate": st.column_config.NumberColumn(format="%.1f%%"),
+                            "Pick%": st.column_config.NumberColumn(format="%.1f%%"),
+                            "Ban%": st.column_config.NumberColumn(format="%.1f%%"),
+                            "Contest%": st.column_config.NumberColumn(format="%.1f%%"),
+                        },
+                        hide_index=True,
+                        width="stretch",
+                        height=800,
+                    )
+                else:
+                    st.info("No hero data available.")
+
+                st.markdown("---")
+
+                # --- Recent Drafts ---
+                st.subheader(f"Recent Drafts (last {len(drafts)} games)")
+                for draft in drafts:
+                    winner_label = "🏆 " + draft["winner"]
+                    label = f"{draft['radiant']} vs {draft['dire']} — {winner_label} — {draft['date']}"
+                    with st.expander(label):
+                        html = draft_to_html(draft)
+                        st.html(html)
+
+    _meta_fragment()
 
 if show_scouting:
     with tab_objects[3]:
@@ -471,6 +476,7 @@ if show_scouting:
                             else:
                                 save_scouting_team(config, username, new_team_name.strip(), players)
                                 st.success(f"Team '{new_team_name.strip()}' created with {len(players)} players!")
+                                st.session_state["scout_team_sel"] = new_team_name.strip()
                                 st.rerun(scope="fragment")
                         except ValueError:
                             st.error("Invalid Steam ID. Use numeric 32-bit or 64-bit IDs.")
@@ -493,7 +499,7 @@ if show_scouting:
                     edit_ids = st.text_area(
                         "Steam IDs (one per line)",
                         value="\n".join(str(p["steam_id"]) for p in players),
-                        key="scout_edit_ids",
+                        key=f"scout_edit_ids_{selected_team}",
                     )
                     ecol1, ecol2 = st.columns(2)
                     with ecol1:
