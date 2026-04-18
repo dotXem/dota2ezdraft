@@ -224,11 +224,12 @@ def identify_exceptional_interactions(scores_df, lower_quantile=0.10, upper_quan
     synergy_upper_threshold = np.quantile(synergy_values, upper_quantile)
 
     exceptionnal_interaction_df = pd.DataFrame(0, index=heroes, columns=heroes)
-    np.fill_diagonal(exceptionnal_interaction_df.values, 0) # Set diagonal elements to 0 (a hero cannot interact with itself)
 
     exceptionnal_interaction_df[scores_df >= synergy_upper_threshold] = 1   # Exceptionally good synergy
     exceptionnal_interaction_df[scores_df <= synergy_lower_threshold] = -1  # Exceptionally bad synergy
-    np.fill_diagonal(exceptionnal_interaction_df.values, 0)
+    # A hero cannot interact with itself
+    for h in heroes:
+        exceptionnal_interaction_df.at[h, h] = 0
 
     return exceptionnal_interaction_df
 
