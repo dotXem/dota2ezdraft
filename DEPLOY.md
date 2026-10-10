@@ -126,7 +126,8 @@ A Cloud Run Job + Cloud Scheduler can fetch Stratz data automatically every day.
 ### 1. Build the job image
 
 ```bash
-gcloud builds submit --tag europe-west1-docker.pkg.dev/$PROJECT_ID/ezdraft/fetch-job -f Dockerfile.job
+gcloud builds submit --config cloudbuild-job.yaml \
+  --substitutions=_IMAGE=europe-west1-docker.pkg.dev/$PROJECT_ID/ezdraft/fetch-job
 ```
 
 ### 2. Create the Cloud Run Job
@@ -167,7 +168,8 @@ gcloud run jobs executions list --job ezdraft-fetch --region europe-west1
 gcloud run jobs logs read ezdraft-fetch --region europe-west1
 
 # Update the job image after code changes
-gcloud builds submit --tag europe-west1-docker.pkg.dev/$PROJECT_ID/ezdraft/fetch-job -f Dockerfile.job
+gcloud builds submit --config cloudbuild-job.yaml \
+  --substitutions=_IMAGE=europe-west1-docker.pkg.dev/$PROJECT_ID/ezdraft/fetch-job
 gcloud run jobs update ezdraft-fetch \
   --image europe-west1-docker.pkg.dev/$PROJECT_ID/ezdraft/fetch-job \
   --region europe-west1

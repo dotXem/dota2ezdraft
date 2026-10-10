@@ -14,7 +14,7 @@ Built with Streamlit, deployed on GCP Cloud Run.
 ### 1. Clone and authenticate
 
 ```bash
-git clone <repo-url> && cd dota2ezdraft
+git clone https://github.com/dotXem/dota2ezdraft.git && cd dota2ezdraft
 gcloud auth login
 gcloud config set project ezdraft
 ```
