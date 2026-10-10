@@ -1,13 +1,20 @@
 """User management with GCS-backed storage."""
 
+import os
 import yaml
 import gcsfs
 import bcrypt
 import secrets
 import streamlit as st
+from dotenv import load_dotenv
 
+load_dotenv()
+
+# Public-read bucket: data snapshots, hero icons, scouting images.
 BUCKET = "heroes-ezdraft"
-USERS_PATH = f"{BUCKET}/users.yaml"
+# Accounts live in a separate private bucket. Point EZDRAFT_USERS_PATH at a
+# local file (e.g. users.local.yaml) to develop without production accounts.
+USERS_PATH = os.environ.get("EZDRAFT_USERS_PATH", "gs://ezdraft-private/users.yaml")
 
 
 def _get_fs():
@@ -16,6 +23,12 @@ def _get_fs():
         return gcsfs.GCSFileSystem(token=creds)
     except Exception:
         return gcsfs.GCSFileSystem()
+
+
+def _open_users(mode):
+    if USERS_PATH.startswith("gs://"):
+        return _get_fs().open(USERS_PATH, mode)
+    return open(USERS_PATH, mode)
 
 
 def _default_config():
@@ -32,24 +45,11 @@ def _default_config():
 
 
 def load_config():
-    """Load user config from GCS, falling back to local file then defaults."""
-    fs = _get_fs()
+    """Load user config, creating an empty one if it doesn't exist yet."""
     try:
-        with fs.open(USERS_PATH, "r") as f:
+        with _open_users("r") as f:
             config = yaml.safe_load(f)
         if config:
-            return config
-    except FileNotFoundError:
-        pass
-
-    # Migration: load from local users.yaml and upload to GCS
-    try:
-        with open("users.yaml", "r") as f:
-            config = yaml.safe_load(f)
-        if config:
-            # Replace weak cookie key with a strong one
-            config["cookie"]["key"] = secrets.token_hex(32)
-            save_config(config)
             return config
     except FileNotFoundError:
         pass
@@ -60,9 +60,8 @@ def load_config():
 
 
 def save_config(config):
-    """Save user config to GCS."""
-    fs = _get_fs()
-    with fs.open(USERS_PATH, "w") as f:
+    """Save user config."""
+    with _open_users("w") as f:
         yaml.dump(config, f, default_flow_style=False, allow_unicode=True)
 
 

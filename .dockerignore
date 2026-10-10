@@ -4,3 +4,9 @@ __pycache__/
 .gitignore
 README.md
 DEPLOY.md
+.env
+.streamlit/secrets.toml
+.secrets/
+users.yaml
+users.local.yaml
+data/

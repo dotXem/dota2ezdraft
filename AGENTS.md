@@ -9,14 +9,15 @@ For user-facing setup see [README.md](README.md). For Cloud Run, see [DEPLOY.md]
 ## Quick start
 
 ```bash
-# Needs: STRATZ_API_TOKEN (in .env or env) + GCS creds in .streamlit/secrets.toml
-gcloud secrets versions access latest --secret=streamlit-local-secrets > .streamlit/secrets.toml
+# .env: STRATZ_API_TOKEN=...  and, for development, EZDRAFT_USERS_PATH=users.local.yaml
+gcloud auth application-default login   # only needed for the production accounts
 pip install -r requirements.txt
 streamlit run streamlit_app.py          # http://localhost:8501
 ```
 
 - **Every module fails at import without `STRATZ_API_TOKEN`.** `get_data_from_stratz.py` reads `os.environ["STRATZ_API_TOKEN"]` at module level, and every other module imports from it. `python-dotenv` loads it from `.env`.
-- **Local runs use the production bucket.** There is no dev bucket or dev users store. With the shared credentials, signing up, editing hero lists or saving scouting teams locally writes to the live `gs://heroes-ezdraft/users.yaml`. Without credentials, gcsfs falls back to anonymous access: the data snapshots can be read, but every write fails with an `HttpError`.
+- **Use a local users file for development.** By default the app reads and writes the **production** accounts in `gs://ezdraft-private/users.yaml`. With `EZDRAFT_USERS_PATH=users.local.yaml` (gitignored), accounts and lists stay in a local file that's created on first run. Data snapshots come from the public `heroes-ezdraft` bucket, which works without credentials (gcsfs falls back to anonymous access).
+- GCS credentials come from `.streamlit/secrets.toml` (`[connections.gcs]`) if present, otherwise from Application Default Credentials. Production has no `secrets.toml` and uses the Cloud Run service account.
 - Prod uses Python 3.11 (Docker). Any 3.11+ works locally.
 
 ### Verifying changes (there are no tests, linters or CI)
@@ -48,22 +49,20 @@ To check UI changes, run `streamlit run streamlit_app.py` and use the affected t
 | `hero_suggestion.py` | Pure pandas/numpy scoring logic for the Draft tab (no I/O). See *Scoring model*. |
 | `get_data_from_stratz.py` | Stratz GraphQL client and shared constants: `STRATZ_API_URL`, `HEADERS`, `HEROES`, `BRACKETS`, `STRATZ_HERO_TO_ID`/`STRATZ_ID_TO_HERO`. Builds the daily matchup snapshot. Run directly, it writes `./<date>.yaml`. |
 | `fetch_and_upload.py` | Daily Cloud Run Job entrypoint. Calls `get_data_from_stratz()` and uploads to `gs://heroes-ezdraft/data/<YYYY-MM-DD>.yaml`. Fails if fewer than `len(HEROES)` heroes were fetched. |
-| `user_manager.py` | Accounts, hero lists and scouting teams. Everything is in one YAML on GCS (`heroes-ezdraft/users.yaml`). Also exports `_get_fs()` and `BUCKET`, which the app reuses for image uploads. |
+| `user_manager.py` | Accounts, hero lists and scouting teams. Everything is in one YAML at `USERS_PATH`: the private `gs://ezdraft-private/users.yaml` by default, or a local file via `EZDRAFT_USERS_PATH`. Also exports `_get_fs()` and `BUCKET` (the public bucket), which the app reuses for image uploads. |
 | `scouting_api.py` | Scouting tab backend: per-player Stratz match history (60 days, paginated), hero pools, team stacks, 5-stack tournament drafts, and PIL-rendered PNG reports. Also owns **`get_hero_icon_url()`**, which every tab uses. |
 | `pro_meta_api.py` | Pro Meta tab backend. Lists leagues through OpenDota SQL Explorer and fetches league matches from Stratz, falling back to OpenDota. Computes pick/ban/contest stats. `draft_to_html()` renders drafts for both Pro Meta and Scouting. |
 | `heroes.yaml` | Hero → `nicknames` (used for draft input aliases) and `roles` (`p1`–`p5`, **currently unused**). |
 | `stratz_hero_to_id.yaml` | Hero display name → Stratz hero ID. **This defines the canonical hero list (`HEROES`).** |
 | `hero_shortnames.yaml` | Stratz hero ID → icon slug (`gs://heroes-ezdraft/icons/<slug>.png`). Kept locally because Stratz calls were failing from Cloud Run (see the comment in `_get_hero_shortnames`). |
 | `Dockerfile` / `Dockerfile.job` / `cloudbuild-job.yaml` / `docker-compose.yml` | App image, daily job image, Cloud Build config for the job image, and the local compose setup. |
-| `.streamlit/config.toml` | Server config (headless, port 8501, XSRF on). `.streamlit/secrets.toml` is gitignored and holds the `[connections.gcs]` service-account key. |
+| `.streamlit/config.toml` | Server config (headless, port 8501, XSRF on). An optional, gitignored `.streamlit/secrets.toml` can hold a `[connections.gcs]` service-account key. |
 
 ### Legacy or unused code (not imported by the app; don't extend it)
 
-- `user_heroes.yaml`: old hero lists, superseded by `heroes_lists` in GCS `users.yaml`.
+- `user_heroes.yaml`: old hero lists, superseded by `heroes_lists` in `users.yaml`.
 - `2024-09-*.yaml`: old-schema snapshots. They work with `hero_suggestion.py` but **not** with the app (no `winrate_brackets` or `positions`).
 - In `scouting_api.py`, `generate_*_markdown()` and `_render_table_image()` are unused. In `pro_meta_api.py`, the `progress_cb` params are unused.
-- `load_config()` still falls back to a local `users.yaml` (gitignored, no longer in the repo) when the GCS file is missing. That was a one-time migration path.
-
 ---
 
 ## External services and data
@@ -73,7 +72,7 @@ Cloud Scheduler (08:00 Europe/Paris) → Cloud Run Job (fetch_and_upload.py)
     → Stratz GraphQL → gs://heroes-ezdraft/data/YYYY-MM-DD.yaml
 Streamlit app (Cloud Run "ezdraft", europe-west1, GCP project "ezdraft")
     ├─ reads  gs://heroes-ezdraft/data/*.yaml        (st.connection FilesConnection, ttl 600s)
-    ├─ r/w    gs://heroes-ezdraft/users.yaml          (gcsfs, user_manager)
+    ├─ r/w    gs://ezdraft-private/users.yaml         (private bucket, gcsfs, user_manager)
     ├─ writes gs://heroes-ezdraft/scouting_images/    (shareable scouting PNGs)
     ├─ links  storage.googleapis.com/heroes-ezdraft/icons/<slug>.png  (public hero icons)
     ├─ Stratz GraphQL  (scouting, pro-meta league matches)  — Bearer token, 1 req/s self-throttle
@@ -97,7 +96,7 @@ Streamlit app (Cloud Run "ezdraft", europe-west1, GCP project "ezdraft")
 - `get_data()` reads `stratz_data["Lion"]` to discover the brackets.
 - Matchup data uses the week starting the Thursday before last, so the week is complete.
 
-### Users store (`gs://heroes-ezdraft/users.yaml`)
+### Users store (`gs://ezdraft-private/users.yaml`)
 
 ```yaml
 credentials: {usernames: {<user>: {name, password (bcrypt), email}}}   # streamlit-authenticator format
@@ -153,7 +152,7 @@ The identifiers spell it `exceptionnal_*` (double n). Keep that spelling consist
 
 ### Grant Scouting access
 
-Add the username to `scouting_users` in `gs://heroes-ezdraft/users.yaml`. There is no admin UI for this.
+Add the username to `scouting_users` in `gs://ezdraft-private/users.yaml` (or in your local users file). There is no admin UI for this.
 
 ### Deploy
 
@@ -179,6 +178,6 @@ Deploying is outward-facing, so confirm with the maintainer before running these
 
 ## Security notes
 
-- Never commit secrets. `.env`, `.streamlit/secrets.toml` and `.secrets/` are gitignored.
-- `.dockerignore` does **not** exclude `.env` or `.streamlit/secrets.toml`, so a local `docker build` bakes them into the image. `gcloud builds submit` respects `.gitignore`.
+- Never commit secrets. `.env`, `.streamlit/secrets.toml`, `.secrets/` and the users files are in both `.gitignore` and `.dockerignore`. `gcloud builds submit` also respects `.gitignore`.
+- **`gs://heroes-ezdraft` is publicly readable**, because hero icons and shared scouting images are served from it by public URL. Never store anything private there. Accounts belong in the private `ezdraft-private` bucket.
 - The repo is public, and older commits contain expired Stratz tokens and a copy of `users.yaml`. Treat anything ever committed as public.

@@ -4,3 +4,4 @@ __pycache__
 users.yaml
 .secrets/
 .env
+users.local.yaml

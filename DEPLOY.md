@@ -46,12 +46,19 @@ docker push europe-west1-docker.pkg.dev/$PROJECT_ID/ezdraft/streamlit-app
 
 ## 4. Ensure GCS access
 
-The default Cloud Run service account (`PROJECT_NUMBER-compute@developer.gserviceaccount.com`) needs read/write access to the `heroes-ezdraft` bucket:
+The default Cloud Run service account (`PROJECT_NUMBER-compute@developer.gserviceaccount.com`) needs read/write access to the public `heroes-ezdraft` bucket (data, icons, scouting images) and the private `ezdraft-private` bucket (user accounts):
 
 ```bash
+SA="serviceAccount:$(gcloud projects describe $PROJECT_ID --format='value(projectNumber)')-compute@developer.gserviceaccount.com"
+
 gcloud storage buckets add-iam-policy-binding gs://heroes-ezdraft \
-  --member="serviceAccount:$(gcloud projects describe $PROJECT_ID --format='value(projectNumber)')-compute@developer.gserviceaccount.com" \
-  --role="roles/storage.objectAdmin"
+  --member="$SA" --role="roles/storage.objectAdmin"
+
+# User accounts must never go in heroes-ezdraft: that bucket is publicly readable.
+gcloud storage buckets create gs://ezdraft-private --location=europe-west1 \
+  --uniform-bucket-level-access --public-access-prevention
+gcloud storage buckets add-iam-policy-binding gs://ezdraft-private \
+  --member="$SA" --role="roles/storage.objectAdmin"
 ```
 
 ## 5. Set the Stratz API token as a secret
@@ -177,11 +184,11 @@ gcloud run jobs update ezdraft-fetch \
 
 ## Local development
 
-For local development, use docker-compose (requires a GCS credentials file):
+For local development, see the [README](README.md). To run the container locally with your own Google credentials:
 
 ```bash
-mkdir -p .secrets
-# Place your service account key at .secrets/gcs_credentials.json
+gcloud auth application-default login
+export GCS_CREDENTIALS_PATH=$HOME/.config/gcloud/application_default_credentials.json
 export STRATZ_API_TOKEN=your_stratz_token_here
 docker compose up --build
 # App available at http://localhost:8501
