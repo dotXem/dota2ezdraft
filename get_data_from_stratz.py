@@ -16,6 +16,9 @@ STRATZ_API_TOKEN = os.environ["STRATZ_API_TOKEN"]
 MAX_CALLS_PER_SECOND = 1
 MAX_CALLS_PER_MINUTE = 100 #250
 
+# Most heroes per snapshot whose matchups can be copied from the previous one
+MAX_FALLBACK_HEROES = 5
+
 with open("stratz_hero_to_id.yaml", "r") as file:
     STRATZ_HERO_TO_ID = yaml.load(file, Loader=yaml.FullLoader)
 STRATZ_ID_TO_HERO = {id: hero for hero, id in STRATZ_HERO_TO_ID.items()}
@@ -122,9 +125,24 @@ def get_matchup_data_from_stratz(session):
 
     return data
 
-def get_data_from_stratz():
+def get_data_from_stratz(fallback=None):
+    """Fetch a full snapshot. `fallback` is an older snapshot used for heroes
+    whose matchups Stratz didn't return."""
     session = requests.Session()
     data = get_matchup_data_from_stratz(session)
+
+    # Stratz sometimes returns no matchups for a hero for a whole day, retries
+    # included. Reuse the previous snapshot's (matchups are weekly, so it's
+    # usually identical) rather than losing the day. Many missing heroes means
+    # something is really wrong, so leave them missing and let the caller fail.
+    missing = [hero for hero in HEROES if hero not in data]
+    if fallback and 0 < len(missing) <= MAX_FALLBACK_HEROES and all(hero in fallback for hero in missing):
+        for hero in missing:
+            print(f"No matchup data for {hero}, reusing the previous snapshot's")
+            data[hero] = {
+                key: fallback[hero][key]
+                for key in ("matchup_winrate", "synergy_winrate", "winrate")
+            }
 
     winrates_per_bracket = get_winrates_per_bracket(session)
     for hero, hero_data in data.items():
