@@ -83,8 +83,12 @@ gcloud run deploy ezdraft \
   --memory 512Mi \
   --min-instances 0 \
   --max-instances 3 \
+  --timeout 3600 \
+  --session-affinity \
   --set-secrets=STRATZ_API_TOKEN=stratz-api-token:latest
 ```
+
+Streamlit keeps each browser session on a websocket. `--timeout` caps how long Cloud Run keeps it open, and `--session-affinity` sends a reconnecting browser back to the same instance, so sessions survive.
 
 Cloud Run gives you a public URL like `https://ezdraft-xxxxx-ew.a.run.app`. Done!
 

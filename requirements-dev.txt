@@ -1,0 +1,3 @@
+-r requirements.txt
+pytest
+google-cloud-storage  # used by the daily job, fetch_and_upload.py

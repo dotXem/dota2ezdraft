@@ -48,6 +48,15 @@ Or with Docker (uses the production accounts; Compose reads the token from `.env
 GCS_CREDENTIALS_PATH=$HOME/.config/gcloud/application_default_credentials.json docker compose up
 ```
 
+## Tests
+
+```bash
+pip install -r requirements-dev.txt
+pytest              # fast offline tests (~10 s)
+pytest -m e2e       # the whole app locally; needs network and STRATZ_API_TOKEN (~2 min)
+pytest -m cloud     # smoke test of the deployed app (~30 s)
+```
+
 ## Deployment
 
 See [DEPLOY.md](DEPLOY.md) for Cloud Run deployment instructions.

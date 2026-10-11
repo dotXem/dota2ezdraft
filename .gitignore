@@ -5,3 +5,4 @@ users.yaml
 .secrets/
 .env
 users.local.yaml
+.pytest_cache/

@@ -10,3 +10,5 @@ DEPLOY.md
 users.yaml
 users.local.yaml
 data/
+tests/
+.pytest_cache/

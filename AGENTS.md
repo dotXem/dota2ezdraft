@@ -20,24 +20,21 @@ streamlit run streamlit_app.py          # http://localhost:8501
 - GCS credentials come from `.streamlit/secrets.toml` (`[connections.gcs]`) if present, otherwise from Application Default Credentials. Production has no `secrets.toml` and uses the Cloud Run service account.
 - Prod uses Python 3.11 (Docker). Any 3.11+ works locally.
 
-### Verifying changes (there are no tests, linters or CI)
+### Tests (`pip install -r requirements-dev.txt`)
 
-The scoring pipeline runs offline against a bundled snapshot in about 6 s:
+| Command | What it runs | Time |
+|---|---|---|
+| `pytest` | Offline: scoring (`test_scoring.py`), daily snapshot assembly and upload with Stratz/GCS stubbed (`test_daily_fetch.py`) | ~10 s |
+| `pytest -m e2e` | The whole app in-process via Streamlit's `AppTest`: draft, accounts, hero lists, Pro Meta, Scouting. Needs network and `STRATZ_API_TOKEN` | ~2 min |
+| `pytest -m cloud` | Read-only smoke test of the deployed service over its websocket, including data freshness (≤ 2 days). `EZDRAFT_URL` overrides the URL | ~30 s |
 
-```bash
-python3 - <<'EOF'
-import yaml
-from hero_suggestion import *
-data = yaml.safe_load(open('2024-09-21.yaml'))
-w, e, a = create_winrate_enemy_synergy_dfs(data)
-c, s = compute_counter_scores(w, e), compute_synergy_scores(w, a)
-ec, es = identify_exceptional_interactions(c), identify_exceptional_interactions(s)
-df = suggest_heroes_from_ally_and_enemy(w, c, s, ec, es, ["Faceless Void", "Techies"], ["Lich"])
-print(df.sort_values(["relevance", "score"], ascending=False).head())
-EOF
-```
-
-To check UI changes, run `streamlit run streamlit_app.py` and use the affected tab. `python hero_suggestion.py` does **not** work: its `__main__` block calls `suggest_heroes_from_ally_and_enemy` with outdated arguments.
+- `tests/conftest.py` points `EZDRAFT_USERS_PATH` at a throwaway file, and the e2e tests send GCS writes to an in-memory filesystem, so tests never touch production data.
+- The scouting e2e test picks five players from a recent pro match. Don't hardcode personal Steam IDs: the repo is public.
+- `AppTest` quirks the e2e tests work around:
+  - A click reruns the whole app, so `st.rerun(scope="fragment")` raises there, though it works in a browser.
+  - The streamlit-authenticator cookie component doesn't run, so logout needs an extra `run()`.
+  - Deleting a keyed widget breaks later reruns of the same session.
+- `python hero_suggestion.py` does **not** work: its `__main__` block calls `suggest_heroes_from_ally_and_enemy` with outdated arguments.
 
 ---
 
@@ -48,13 +45,13 @@ To check UI changes, run `streamlit run streamlit_app.py` and use the affected t
 | `streamlit_app.py` | **The app.** Login/registration sidebar, data-file and bracket selectors, and 4 tabs: Draft, My Hero Lists, Pro Meta, Scouting (Scouting only for whitelisted users). All UI lives here. |
 | `hero_suggestion.py` | Pure pandas/numpy scoring logic for the Draft tab (no I/O). See *Scoring model*. |
 | `get_data_from_stratz.py` | Stratz GraphQL client and shared constants: `STRATZ_API_URL`, `HEADERS`, `HEROES`, `BRACKETS`, `STRATZ_HERO_TO_ID`/`STRATZ_ID_TO_HERO`. Builds the daily matchup snapshot. Run directly, it writes `./<date>.yaml`. |
-| `fetch_and_upload.py` | Daily Cloud Run Job entrypoint. Calls `get_data_from_stratz()` and uploads to `gs://heroes-ezdraft/data/<YYYY-MM-DD>.yaml`. Fails if fewer than `len(HEROES)` heroes were fetched. |
+| `fetch_and_upload.py` | Daily Cloud Run Job entrypoint. Calls `get_data_from_stratz()` and uploads to `gs://heroes-ezdraft/data/<YYYY-MM-DD>.yaml`. Stratz sometimes returns no matchups for 1–2 heroes for a whole day, which used to fail about 10% of runs. Their matchups are now copied from the latest snapshot (at most `MAX_FALLBACK_HEROES` = 5). Beyond that, or for a hero absent from that snapshot, the job fails and uploads nothing, because a partial snapshot breaks the app. |
 | `user_manager.py` | Accounts, hero lists and scouting teams. Everything is in one YAML at `USERS_PATH`: the private `gs://ezdraft-private/users.yaml` by default, or a local file via `EZDRAFT_USERS_PATH`. Also exports `_get_fs()` and `BUCKET` (the public bucket), which the app reuses for image uploads. |
 | `scouting_api.py` | Scouting tab backend: per-player Stratz match history (60 days, paginated), hero pools, team stacks, 5-stack tournament drafts, and PIL-rendered PNG reports. Also owns **`get_hero_icon_url()`**, which every tab uses. |
 | `pro_meta_api.py` | Pro Meta tab backend. Lists leagues through OpenDota SQL Explorer and fetches league matches from Stratz, falling back to OpenDota. Computes pick/ban/contest stats. `draft_to_html()` renders drafts for both Pro Meta and Scouting. |
 | `heroes.yaml` | Hero → `nicknames` (used for draft input aliases) and `roles` (`p1`–`p5`, **currently unused**). |
 | `stratz_hero_to_id.yaml` | Hero display name → Stratz hero ID. **This defines the canonical hero list (`HEROES`).** |
-| `hero_shortnames.yaml` | Stratz hero ID → icon slug (`gs://heroes-ezdraft/icons/<slug>.png`). Kept locally because Stratz calls were failing from Cloud Run (see the comment in `_get_hero_shortnames`). |
+| `hero_shortnames.yaml` | Stratz hero ID → icon slug (`gs://heroes-ezdraft/icons/<slug>.png`). Kept locally so icons don't depend on a Stratz call. Stratz once failed from Cloud Run; it works there as of 2026-10. |
 | `Dockerfile` / `Dockerfile.job` / `cloudbuild-job.yaml` / `docker-compose.yml` | App image, daily job image, Cloud Build config for the job image, and the local compose setup. |
 | `.streamlit/config.toml` | Server config (headless, port 8501, XSRF on). An optional, gitignored `.streamlit/secrets.toml` can hold a `[connections.gcs]` service-account key. |
 
@@ -127,7 +124,7 @@ The identifiers spell it `exceptionnal_*` (double n). Keep that spelling consist
 ## Conventions and gotchas
 
 - **Hero names are the join key everywhere.** They are display names such as `"Nature's Prophet"` or `"Anti-Mage"`. The exact string must match across `stratz_hero_to_id.yaml`, `heroes.yaml`, the snapshot data, and users' saved lists.
-- **Pandas Copy-on-Write.** `requirements.txt` allows pandas 3, which enforces CoW, and the Docker build installs the newest allowed version. Writing through `df.values` (for example `np.fill_diagonal(df.values, …)`) silently does nothing there. Use `.at` or `.loc`. The latest commit (`1345ba8`) fixed exactly this. Your local pandas may be 2.x and hide the bug.
+- **Pandas Copy-on-Write.** `requirements.txt` allows pandas 3, which enforces CoW, and the Docker build installs the newest allowed version. Writing through `df.values` (for example `np.fill_diagonal(df.values, …)`) raises `ValueError: underlying array is read-only` there. Use `.at` or `.loc`. Commit `1345ba8` fixed exactly this. Your local pandas may be 2.x and hide the bug, so `test_scoring.py` turns CoW on to catch it.
 - **`streamlit-authenticator` is pinned at 0.3.3** because the app uses that version's API (`authenticator.login('sidebar')` returns a tuple). Newer versions break it. `bcrypt` comes in through this package.
 - **Streamlit structure.** The Pro Meta and Scouting tabs are wrapped in `@st.fragment`, so their buttons rerun only the fragment. Use `st.rerun(scope="fragment")` inside them.
   - Fetched results are cached per session in `st.session_state` under `pro_meta_data_<league_id>` and `scout_data_<team>`, each with an ISO `fetched_at`. They are not shared between users.
@@ -171,6 +168,14 @@ gcloud run jobs update ezdraft-fetch --image europe-west1-docker.pkg.dev/ezdraft
 ```
 
 On Cloud Run, the token comes from Secret Manager (`stratz-api-token`) and GCS auth comes from the default compute service account.
+
+The service should run with `--timeout=3600 --session-affinity`. Cloud Run closes websockets at the request timeout (300 s by default), and without affinity a reconnecting browser can land on another instance and lose its Streamlit session.
+
+Which image to rebuild:
+- The app image contains everything.
+- The job image runs only `fetch_and_upload.py`, `get_data_from_stratz.py` and `stratz_hero_to_id.yaml`. A change to any of those (a new hero, for example) needs a job rebuild too.
+
+Run `pytest` before deploying and `pytest -m cloud` after.
 
 Deploying is outward-facing, so confirm with the maintainer before running these.
 
