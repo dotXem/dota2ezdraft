@@ -24,8 +24,8 @@ streamlit run streamlit_app.py          # http://localhost:8501
 
 | Command | What it runs | Time |
 |---|---|---|
-| `pytest` | Offline: scoring (`test_scoring.py`), daily snapshot assembly and upload with Stratz/GCS stubbed (`test_daily_fetch.py`) | ~10 s |
-| `pytest -m e2e` | The whole app in-process via Streamlit's `AppTest`: draft, accounts, hero lists, Pro Meta, Scouting. Needs network and `STRATZ_API_TOKEN` | ~2 min |
+| `pytest` | Offline: scoring (`test_scoring.py`), daily snapshot assembly and upload with Stratz/GCS stubbed (`test_daily_fetch.py`), hero grid files (`test_hero_grid.py`) | ~10 s |
+| `pytest -m e2e` | The whole app in-process via Streamlit's `AppTest`: draft, accounts, hero lists, Pro Meta, Scouting, Config. Needs network and `STRATZ_API_TOKEN` | ~2 min |
 | `pytest -m cloud` | Read-only smoke test of the deployed service over its websocket, including data freshness (≤ 2 days). `EZDRAFT_URL` overrides the URL | ~30 s |
 
 - `tests/conftest.py` points `EZDRAFT_USERS_PATH` at a throwaway file, and the e2e tests send GCS writes to an in-memory filesystem, so tests never touch production data.
@@ -42,13 +42,14 @@ streamlit run streamlit_app.py          # http://localhost:8501
 
 | File | Role |
 |---|---|
-| `streamlit_app.py` | **The app.** Login/registration sidebar, data-file and bracket selectors, and 4 tabs: Draft, My Hero Lists, Pro Meta, Scouting (Scouting only for whitelisted users). All UI lives here. |
+| `streamlit_app.py` | **The app.** Login/registration sidebar, data-file and bracket selectors, and 5 tabs: Draft, My Hero Lists, Pro Meta, Scouting, Config (the last two only for whitelisted users). All UI lives here. |
 | `hero_suggestion.py` | Pure pandas/numpy scoring logic for the Draft tab (no I/O). See *Scoring model*. |
 | `get_data_from_stratz.py` | Stratz GraphQL client and shared constants: `STRATZ_API_URL`, `HEADERS`, `HEROES`, `BRACKETS`, `STRATZ_HERO_TO_ID`/`STRATZ_ID_TO_HERO`. Builds the daily matchup snapshot. Run directly, it writes `./<date>.yaml`. |
 | `fetch_and_upload.py` | Daily Cloud Run Job entrypoint. Calls `get_data_from_stratz()` and uploads to `gs://heroes-ezdraft/data/<YYYY-MM-DD>.yaml`. Stratz sometimes returns no matchups for 1–2 heroes for a whole day, which used to fail about 10% of runs. Their matchups are now copied from the latest snapshot (at most `MAX_FALLBACK_HEROES` = 5). Beyond that, or for a hero absent from that snapshot, the job fails and uploads nothing, because a partial snapshot breaks the app. |
 | `user_manager.py` | Accounts, hero lists and scouting teams. Everything is in one YAML at `USERS_PATH`: the private `gs://ezdraft-private/users.yaml` by default, or a local file via `EZDRAFT_USERS_PATH`. Also exports `_get_fs()` and `BUCKET` (the public bucket), which the app reuses for image uploads. |
 | `scouting_api.py` | Scouting tab backend: per-player Stratz match history (60 days, paginated), hero pools, team stacks, 5-stack tournament drafts, and PIL-rendered PNG reports. Also owns **`get_hero_icon_url()`**, which every tab uses. |
 | `pro_meta_api.py` | Pro Meta tab backend. Lists leagues through OpenDota SQL Explorer and fetches league matches from Stratz, falling back to OpenDota. Computes pick/ban/contest stats. `draft_to_html()` renders drafts for both Pro Meta and Scouting. |
+| `hero_grid.py` | Config tab backend. Reads and checks a Dota 2 `hero_grid_config.json` uploaded by the user (`load_hero_grid_config()`) and renders one of its grids as HTML (`hero_grid_to_html()`). `scouting_grid_config()` builds a grid from a scouted team: a row per player every 120, starting with an empty 20-high category named after the player, then one 80×80 single-hero category named `<games> <winrate>%` for each of the player's 12 most played heroes. It keeps the first 5 players only, so that no category goes lower than 600 (`SCOUT_MAX_HEIGHT`). The app never stores the file: added grids live in `st.session_state` (`config_added_<file id>`, and `config_replaced_<file id>` for the names of the file's grids they replaced: adding a team that already has a grid asks to replace it) and the user downloads the updated file (`dump_hero_grid_config()`). |
 | `heroes.yaml` | Hero → `nicknames` (used for draft input aliases) and `roles` (`p1`–`p5`, **currently unused**). |
 | `stratz_hero_to_id.yaml` | Hero display name → Stratz hero ID. **This defines the canonical hero list (`HEROES`).** |
 | `hero_shortnames.yaml` | Stratz hero ID → icon slug (`gs://heroes-ezdraft/icons/<slug>.png`). Kept locally so icons don't depend on a Stratz call. Stratz once failed from Cloud Run; it works there as of 2026-10. |
@@ -99,7 +100,7 @@ Streamlit app (Cloud Run "ezdraft", europe-west1, GCP project "ezdraft")
 credentials: {usernames: {<user>: {name, password (bcrypt), email}}}   # streamlit-authenticator format
 cookie: {name, key, expiry_days}
 heroes_lists:   {<user>: {<list name>: [<Hero>, ...]}}
-scouting_users: [<user>, ...]                     # grants the Scouting tab; edit by hand in GCS
+scouting_users: [<user>, ...]                     # grants the Scouting and Config tabs; edit by hand in GCS
 scouting_teams: {<user>: {<team>: {players: [{steam_id: int (32-bit), name: str}]}}}
 ```
 
@@ -129,7 +130,8 @@ The identifiers spell it `exceptionnal_*` (double n). Keep that spelling consist
 - **Streamlit structure.** The Pro Meta and Scouting tabs are wrapped in `@st.fragment`, so their buttons rerun only the fragment. Use `st.rerun(scope="fragment")` inside them.
   - Fetched results are cached per session in `st.session_state` under `pro_meta_data_<league_id>` and `scout_data_<team>`, each with an ISO `fetched_at`. They are not shared between users.
   - Snapshot processing uses `@st.cache_data`, keyed on the file path.
-  - Widget keys are prefixed by tab (`meta_*`, `scout_*`) to avoid collisions. Follow that pattern.
+  - Widget keys are prefixed by tab (`meta_*`, `scout_*`, `config_*`) to avoid collisions. Follow that pattern.
+- **Hero grid files** (`hero_grid_config.json`, from `Steam/userdata/<id>/570/remote/cfg/`): `{version, configs: [{config_name, categories: [{category_name, x_position, y_position, width, height, hero_ids}]}]}`. `hero_ids` are Dota hero IDs, the same as Stratz's (`STRATZ_ID_TO_HERO`). `load_hero_grid_config()` returns the file untouched so it can be written back.
 - **Draft dict format** is shared between `pro_meta_api.build_draft_table` and `scouting_api.build_scouting_drafts`: `{match_id, date, radiant, dire, winner, actions: [{order, type: "Pick"|"Ban", hero, icon, side: "Radiant"|"Dire", team}]}`. `draft_to_html()` and `generate_drafts_image()` both consume it.
 - **OpenDota fallback matches** have `position: None` and `steamAccountId: None`. The UI hides the `Pos *` columns when they're all zero.
 - **Steam IDs** are normalized to 32-bit account IDs (`normalize_steam_id`), and both 32-bit and 64-bit input is accepted.
@@ -149,7 +151,7 @@ The identifiers spell it `exceptionnal_*` (double n). Keep that spelling consist
 
 ### Grant Scouting access
 
-Add the username to `scouting_users` in `gs://ezdraft-private/users.yaml` (or in your local users file). There is no admin UI for this.
+This also grants the Config tab. Add the username to `scouting_users` in `gs://ezdraft-private/users.yaml` (or in your local users file). There is no admin UI for this.
 
 ### Deploy
 
