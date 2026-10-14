@@ -3,7 +3,11 @@
 Needs network: the public data bucket, OpenDota, and Stratz (STRATZ_API_TOKEN in
 .env). Accounts go to a throwaway file (see conftest.py) and GCS writes to memory.
 """
+import json
+from pathlib import Path
+
 import fsspec
+import pandas as pd
 import pytest
 import yaml
 from streamlit.testing.v1 import AppTest
@@ -20,7 +24,9 @@ def no_gcs_writes(monkeypatch):
 
 
 def new_session():
-    at = AppTest.from_file("streamlit_app.py", default_timeout=600)
+    # Absolute: AppTest resolves a relative path against this file's directory
+    app = Path(__file__).resolve().parent.parent / "streamlit_app.py"
+    at = AppTest.from_file(str(app), default_timeout=600)
     at.run()
     return at
 
@@ -164,3 +170,76 @@ def test_scouting(needs_stratz):
     assert all(p["name"] for p in players)  # names filled in from Stratz
     assert any("data:image/png;base64" in str(h.proto) for h in at.get("html"))
     assert user_manager._get_fs().exists("heroes-ezdraft/scouting_images/Pro_team_full.png")
+
+
+def test_config():
+    config = user_manager.load_config()
+    user_manager.register_user(config, "gridder", "Gridder", "password123")
+    config["scouting_users"] = config.get("scouting_users", []) + ["gridder"]
+    config.setdefault("scouting_teams", {})["gridder"] = {"Rivals": {"players": [
+        {"steam_id": 111, "name": "One"}, {"steam_id": 222, "name": "Two"},
+    ]}}
+    user_manager.save_config(config)
+
+    at = new_session()
+    login(at, "gridder", "password123")
+    assert [t.label for t in at.tabs][-1] == "Config"
+
+    def category(name, x, hero_ids):
+        return {"category_name": name, "x_position": x, "y_position": 0.0,
+                "width": 600.0, "height": 90.0, "hero_ids": hero_ids}
+
+    grid = {"version": 3, "configs": [
+        {"config_name": "Mine", "categories": [category("Carries", 0.0, [1, 99999])]},
+        {"config_name": "Team", "categories": [category("Mids", 600.0, [2]), category("Supports", 0.0, [26])]},
+    ]}
+    at.file_uploader(key="config_upload").upload("hero_grid_config.json", yaml.safe_dump(grid).encode()).run()
+    assert any("not valid JSON" in e.value for e in at.error)
+
+    at.file_uploader(key="config_upload").upload("hero_grid_config.json", json.dumps(grid).encode()).run()
+    assert not errors(at)
+    assert any("99999" in w.value for w in at.warning)
+    assert at.dataframe[-1].value["Heroes"].tolist() == ["Anti-Mage, #99999"]
+    assert any("icons/antimage.png" in str(h.proto) for h in at.get("html"))
+
+    by_label(at.selectbox, "Select grid").set_value(1).run()
+    assert not errors(at)
+    assert at.dataframe[-1].value["Category"].tolist() == ["Supports", "Mids"]  # in grid order
+
+    # A grid from a scouted team, whose data the Scouting tab would have fetched
+    def hero_stats(*rows):
+        df = pd.DataFrame(rows, columns=["Hero", "Games", "Wins"])
+        return df.assign(Icon="", Winrate=df["Wins"] / df["Games"] * 100, **{"Last Played": "2026-01-01"})
+
+    at.session_state["scout_data_Rivals"] = {
+        "player_names": {111: "One", 222: "Two"},
+        "player_heroes": {111: hero_stats(("Axe", 3, 1), ("Anti-Mage", 12, 7)), 222: hero_stats(("Lion", 4, 4))},
+        "team_games": pd.DataFrame(),
+        "drafts": [],
+        "fetched_at": "2026-01-01T00:00:00",
+    }
+    assert at.get("download_button")[0].proto.disabled  # nothing new to download yet
+    at.button(key="config_add_btn").click().run()
+    assert not errors(at)
+    grids = by_label(at.selectbox, "Select grid")
+    assert len(grids.options) == 3 and grids.value == 2  # the new grid is the one shown
+    assert at.dataframe[-1].value["Category"].tolist() == ["One", "12 58%", "3 33%", "Two", "4 100%"]
+    assert at.dataframe[-1].value["Heroes"].tolist() == ["", "Anti-Mage", "Axe", "", "Lion"]
+    assert not at.get("download_button")[0].proto.disabled
+
+    # Adding the same team again asks before replacing its grid
+    at.button(key="config_add_btn").click().run()
+    assert any("already a grid named 'Rivals'" in w.value for w in at.warning)
+    by_label(at.button, "Cancel").click().run()
+    assert not errors(at)
+    assert not any("already a grid" in w.value for w in at.warning)
+    assert len(by_label(at.selectbox, "Select grid").options) == 3
+
+    at.session_state["scout_data_Rivals"]["player_heroes"][222] = hero_stats(("Lion", 5, 5))
+    at.button(key="config_add_btn").click().run()
+    by_label(at.button, "Replace").click().run()
+    assert not errors(at)
+    grids = by_label(at.selectbox, "Select grid")
+    assert grids.options == ["Mine", "Team", "Rivals"]
+    assert grids.value == 2
+    assert at.dataframe[-1].value["Category"].tolist()[-1] == "5 100%"
