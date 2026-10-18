@@ -24,7 +24,8 @@ SCOUT_MAX_PLAYERS = int((SCOUT_MAX_HEIGHT - SCOUT_NAME_HEIGHT - SCOUT_CATEGORY_H
 
 
 def _is_number(value):
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
+    # json.loads accepts NaN and Infinity, which would break the layout and the written file
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
 
 def load_hero_grid_config(raw):
