@@ -686,8 +686,8 @@ if show_scouting:
                 "Open a hero_grid_config.json",
                 type="json",
                 key="config_upload",
-                help="Dota 2 keeps it in Steam/userdata/<your Steam ID>/570/remote/cfg/hero_grid_config.json",
             )
+            st.caption("Dota 2 keeps it in `Steam/userdata/<your Steam ID>/570/remote/cfg/`")
             if uploaded is None:
                 st.info("Open your Dota 2 hero grid file to see its grids.")
                 return
