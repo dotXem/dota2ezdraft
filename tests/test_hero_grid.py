@@ -61,6 +61,8 @@ def broken(change):
     (broken(lambda g: g["configs"][0].pop("categories")), '"categories"'),
     (broken(lambda g: g["configs"][0]["categories"][0].pop("category_name")), '"category_name"'),
     (broken(lambda g: g["configs"][0]["categories"][0].update(width="600")), '"width"'),
+    (broken(lambda g: g["configs"][0]["categories"][0].update(width=float("nan"))), '"width"'),
+    (broken(lambda g: g["configs"][0]["categories"][0].update(x_position=float("inf"))), '"x_position"'),
     (broken(lambda g: g["configs"][0]["categories"][0].update(hero_ids=["1"])), '"hero_ids"'),
 ])
 def test_load_rejects_other_files(raw, message):

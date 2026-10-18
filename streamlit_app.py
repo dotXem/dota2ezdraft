@@ -686,8 +686,8 @@ if show_scouting:
                 "Open a hero_grid_config.json",
                 type="json",
                 key="config_upload",
-                help="Dota 2 keeps it in Steam/userdata/<your Steam ID>/570/remote/cfg/hero_grid_config.json",
             )
+            st.caption("Dota 2 keeps it in `Steam/userdata/<your Steam ID>/570/remote/cfg/`")
             if uploaded is None:
                 st.info("Open your Dota 2 hero grid file to see its grids.")
                 return
@@ -736,6 +736,8 @@ if show_scouting:
                 with bcol:
                     add_clicked = st.button("Add a grid from this team", key="config_add_btn")
                 if add_clicked:
+                    # Asked again below if this team has a grid already
+                    st.session_state.pop(pending_key, None)
                     players = teams[team].get("players", [])
                     scout_key = f"scout_data_{team}"
                     if scout_key not in st.session_state:
@@ -755,11 +757,11 @@ if show_scouting:
                             for sid, p in zip(player_sids, players)
                         ])
                         if not any(c["hero_ids"] for c in new_grid["categories"]):
-                            st.error(f"No hero found for the players of {team}.")
+                            first = f"the first {SCOUT_MAX_PLAYERS} " if len(players) > SCOUT_MAX_PLAYERS else ""
+                            st.error(f"No hero found for {first}players of {team}.")
                         elif any(c["config_name"] == team for c in grid_configs):
                             st.session_state[pending_key] = {"grid": new_grid, "players": len(players)}
                         else:
-                            st.session_state.pop(pending_key, None)
                             _add_grid(new_grid, len(players))
 
                 pending = st.session_state.get(pending_key)
@@ -814,7 +816,11 @@ if show_scouting:
             if unknown_ids:
                 st.warning(f"Unknown hero IDs: {', '.join(map(str, unknown_ids))}")
 
-            st.html(hero_grid_to_html(grid_config))
+            grid_html = hero_grid_to_html(grid_config)
+            if grid_html:
+                st.html(grid_html)
+            else:
+                st.warning("This grid can't be drawn: its categories have no width or height.")
 
             st.dataframe(
                 pd.DataFrame([

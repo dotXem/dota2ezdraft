@@ -218,14 +218,18 @@ def test_config():
         "drafts": [],
         "fetched_at": "2026-01-01T00:00:00",
     }
-    assert at.get("download_button")[0].proto.disabled  # nothing new to download yet
+    def config_download():
+        label = "Download the updated hero_grid_config.json"
+        return next(b for b in at.get("download_button") if b.proto.label == label)
+
+    assert config_download().proto.disabled  # nothing new to download yet
     at.button(key="config_add_btn").click().run()
     assert not errors(at)
     grids = by_label(at.selectbox, "Select grid")
     assert len(grids.options) == 3 and grids.value == 2  # the new grid is the one shown
     assert at.dataframe[-1].value["Category"].tolist() == ["One", "12 58%", "3 33%", "Two", "4 100%"]
     assert at.dataframe[-1].value["Heroes"].tolist() == ["", "Anti-Mage", "Axe", "", "Lion"]
-    assert not at.get("download_button")[0].proto.disabled
+    assert not config_download().proto.disabled
 
     # Adding the same team again asks before replacing its grid
     at.button(key="config_add_btn").click().run()
