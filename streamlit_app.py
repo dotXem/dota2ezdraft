@@ -5,13 +5,14 @@ st.set_page_config(layout="wide", page_title="EZDraft - Dota 2", page_icon="âš”ï
 import yaml
 import pandas as pd
 import numpy as np
-from get_data_from_stratz import HEROES, BRACKETS
+from get_data_from_stratz import HEROES, BRACKETS, STRATZ_ID_TO_HERO
 from st_files_connection import FilesConnection
 from hero_suggestion import *
 import streamlit_authenticator as stauth
 from user_manager import load_config, save_config, get_user_heroes, register_user, change_password, save_hero_list, delete_hero_list, is_scouting_user, get_scouting_teams, save_scouting_team, delete_scouting_team
 from scouting_api import fetch_all_scouting_data, normalize_steam_id, generate_player_image, generate_team_games_image, generate_full_scouting_image, get_hero_icon_url
 from pro_meta_api import fetch_recent_leagues, fetch_pro_meta, draft_to_html, lookup_league_info
+from hero_grid import load_hero_grid_config, dump_hero_grid_config, hero_grid_to_html, scouting_grid_config, SCOUT_MAX_PLAYERS
 
 st.sidebar.header("User")
 
@@ -222,7 +223,7 @@ def display_hero_suggestions(winrates_series, counter_scores_df, synergy_scores_
 show_scouting = authentication_status and is_scouting_user(config, username)
 tab_names = ["Draft", "My Hero Lists", "Pro Meta"]
 if show_scouting:
-    tab_names.append("Scouting")
+    tab_names += ["Scouting", "Config"]
 tab_objects = st.tabs(tab_names)
 draft_tab = tab_objects[0]
 lists_tab = tab_objects[1]
@@ -675,3 +676,163 @@ if show_scouting:
                                 st.html(html)
 
         _scouting_fragment()
+
+    with tab_objects[4]:
+
+        @st.fragment
+        def _config_fragment():
+            st.subheader("Hero Grid Config")
+            uploaded = st.file_uploader(
+                "Open a hero_grid_config.json",
+                type="json",
+                key="config_upload",
+            )
+            st.caption("Dota 2 keeps it in `Steam/userdata/<your Steam ID>/570/remote/cfg/`")
+            if uploaded is None:
+                st.info("Open your Dota 2 hero grid file to see its grids.")
+                return
+
+            try:
+                hero_grid = load_hero_grid_config(uploaded.getvalue())
+            except ValueError as e:
+                st.error(f"Can't read {uploaded.name}: {e}")
+                return
+
+            grid_configs = hero_grid["configs"]
+            grid_sel_key = f"config_grid_sel_{uploaded.file_id}"
+            # The upload can't be changed, so the changes to it are kept apart, per file:
+            # the grids added, and the names of the file's grids they replaced
+            added_key = f"config_added_{uploaded.file_id}"
+            replaced_key = f"config_replaced_{uploaded.file_id}"
+            # A grid built from a team that has a grid already, waiting for the user to confirm
+            pending_key = f"config_pending_{uploaded.file_id}"
+            replaced_names = st.session_state.get(replaced_key, set())
+            grid_configs[:] = [c for c in grid_configs if c["config_name"] not in replaced_names]
+            grid_configs.extend(st.session_state.get(added_key, []))
+
+            def _add_grid(new_grid, n_players):
+                """Add new_grid in place of the grids with the same name, and show it."""
+                name = new_grid["config_name"]
+                st.session_state.setdefault(replaced_key, set()).add(name)
+                st.session_state[added_key] = [
+                    c for c in st.session_state.get(added_key, []) if c["config_name"] != name
+                ] + [new_grid]
+                grid_configs[:] = [c for c in grid_configs if c["config_name"] != name] + [new_grid]
+                # Show the new grid: set before the selectbox below is created
+                st.session_state[grid_sel_key] = len(grid_configs) - 1
+                st.success(f"Grid '{name}' added.")
+                if n_players > SCOUT_MAX_PLAYERS:
+                    st.warning(
+                        f"A grid only has room for {SCOUT_MAX_PLAYERS} players: "
+                        f"the last {n_players - SCOUT_MAX_PLAYERS} of {name} were left out."
+                    )
+
+            # --- Add a grid from a scouted team ---
+            teams = get_scouting_teams(config, username)
+            if teams:
+                tcol, bcol = st.columns([3, 1], vertical_alignment="bottom")
+                with tcol:
+                    team = st.selectbox("Scouted team", list(teams), key="config_team_sel")
+                with bcol:
+                    add_clicked = st.button("Add a grid from this team", key="config_add_btn")
+                if add_clicked:
+                    # Asked again below if this team has a grid already
+                    st.session_state.pop(pending_key, None)
+                    players = teams[team].get("players", [])
+                    scout_key = f"scout_data_{team}"
+                    if scout_key not in st.session_state:
+                        with st.spinner(f"Fetching data for {len(players)} players from Stratz..."):
+                            try:
+                                st.session_state[scout_key] = fetch_all_scouting_data(players)
+                            except Exception as e:
+                                st.error(f"Error fetching data: {e}")
+                    if scout_key in st.session_state:
+                        scout_data = st.session_state[scout_key]
+                        player_sids = [normalize_steam_id(p["steam_id"]) for p in players]
+                        new_grid = scouting_grid_config(team, [
+                            (
+                                scout_data.get("player_names", {}).get(sid) or p.get("name") or str(sid),
+                                scout_data.get("player_heroes", {}).get(sid, pd.DataFrame()),
+                            )
+                            for sid, p in zip(player_sids, players)
+                        ])
+                        if not any(c["hero_ids"] for c in new_grid["categories"]):
+                            first = f"the first {SCOUT_MAX_PLAYERS} " if len(players) > SCOUT_MAX_PLAYERS else ""
+                            st.error(f"No hero found for {first}players of {team}.")
+                        elif any(c["config_name"] == team for c in grid_configs):
+                            st.session_state[pending_key] = {"grid": new_grid, "players": len(players)}
+                        else:
+                            _add_grid(new_grid, len(players))
+
+                pending = st.session_state.get(pending_key)
+                if pending:
+                    name = pending["grid"]["config_name"]
+                    confirm_box = st.empty()
+                    with confirm_box.container():
+                        st.warning(f"There is already a grid named '{name}'. Replace it with the new one?")
+                        rcol, ccol, _ = st.columns([1, 1, 4])
+                        # No keys: AppTest can't rerun a session once a keyed widget is gone
+                        replace = rcol.button("Replace", type="primary")
+                        cancel = ccol.button("Cancel")
+                    if replace or cancel:
+                        del st.session_state[pending_key]
+                        confirm_box.empty()
+                        if replace:
+                            _add_grid(pending["grid"], pending["players"])
+
+            # Always shown, so it's easy to find; there's nothing new to download until a grid is added
+            st.download_button(
+                "Download the updated hero_grid_config.json",
+                data=dump_hero_grid_config(hero_grid),
+                file_name="hero_grid_config.json",
+                mime="application/json",
+                type="primary",
+                disabled=not st.session_state.get(added_key),
+                key=f"config_download_{uploaded.file_id}",
+                help="Enabled once a grid is added. Replace the file in "
+                     "Steam/userdata/<your Steam ID>/570/remote/cfg/ while Dota 2 is closed.",
+            )
+
+            if not grid_configs:
+                st.info("This file has no grid.")
+                return
+
+            # Selected by index (names aren't unique), with a key per file so a new file starts on its first grid
+            grid_idx = st.selectbox(
+                "Select grid",
+                range(len(grid_configs)),
+                format_func=lambda i: grid_configs[i]["config_name"],
+                key=grid_sel_key,
+            )
+            grid_config = grid_configs[grid_idx]
+            categories = sorted(grid_config["categories"], key=lambda c: (c["y_position"], c["x_position"]))
+            if not categories:
+                st.info("This grid has no category.")
+                return
+
+            grid_hero_ids = {hero_id for c in categories for hero_id in c["hero_ids"]}
+            st.caption(f"{len(categories)} categories, {len(grid_hero_ids)} different heroes")
+            unknown_ids = sorted(grid_hero_ids - STRATZ_ID_TO_HERO.keys())
+            if unknown_ids:
+                st.warning(f"Unknown hero IDs: {', '.join(map(str, unknown_ids))}")
+
+            grid_html = hero_grid_to_html(grid_config)
+            if grid_html:
+                st.html(grid_html)
+            else:
+                st.warning("This grid can't be drawn: its categories have no width or height.")
+
+            st.dataframe(
+                pd.DataFrame([
+                    {
+                        "Category": c["category_name"],
+                        "Count": len(c["hero_ids"]),
+                        "Heroes": ", ".join(STRATZ_ID_TO_HERO.get(i, f"#{i}") for i in c["hero_ids"]),
+                    }
+                    for c in categories
+                ]),
+                hide_index=True,
+                width="stretch",
+            )
+
+        _config_fragment()
