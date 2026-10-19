@@ -487,9 +487,14 @@ def fetch_all_scouting_data(team_players):
 
     opendota_matches = {}
 
+    edited_names = {
+        normalize_steam_id(p["steam_id"]): p["name"]
+        for p in team_players if p.get("name_edited") and p.get("name")
+    }
+
     for sid in steam_ids:
         name, matches = fetch_player_data(session, sid)
-        player_names[sid] = name
+        player_names[sid] = edited_names.get(sid) or name
         all_matches[sid] = matches
         opendota_matches[sid] = fetch_opendota_player_matches(session, sid)
 

@@ -102,7 +102,7 @@ credentials: {usernames: {<user>: {name, password (bcrypt), email}}}   # streaml
 cookie: {name, key, expiry_days}
 heroes_lists:   {<user>: {<list name>: [<Hero>, ...]}}
 scouting_users: [<user>, ...]                     # grants the Scouting and Config tabs; edit by hand in GCS
-scouting_teams: {<user>: {<team>: {players: [{steam_id: int (32-bit), name: str}]}}}
+scouting_teams: {<user>: {<team>: {players: [{steam_id: int (32-bit), name: str, name_edited: bool}]}}}   # name_edited: renamed by hand, fetches keep it
 ```
 
 The config is loaded **once per browser session** into `st.session_state.user_config`, and every write saves the **whole file**. Two sessions writing at once means the last write wins and silently drops the other's changes. Account for this before adding more per-user state.

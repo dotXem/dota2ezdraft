@@ -490,11 +490,6 @@ if show_scouting:
                 team_data = teams[selected_team]
                 players = team_data.get("players", [])
 
-                # Show current roster
-                if players:
-                    player_display = ", ".join(p.get("name") or str(p["steam_id"]) for p in players)
-                    st.caption(f"Roster: {player_display}")
-
                 # Edit team
                 with st.expander("Edit team"):
                     edit_ids = st.text_area(
@@ -507,12 +502,12 @@ if show_scouting:
                         if st.button("Save changes", key="scout_save_btn"):
                             try:
                                 updated = []
-                                existing = {p["steam_id"]: p.get("name", "") for p in players}
+                                existing = {p["steam_id"]: p for p in players}
                                 for line in edit_ids.strip().splitlines():
                                     line = line.strip()
                                     if line:
                                         sid = normalize_steam_id(line)
-                                        updated.append({"steam_id": sid, "name": existing.get(sid, "")})
+                                        updated.append(existing.get(sid, {"steam_id": sid, "name": ""}))
                                 save_scouting_team(config, username, selected_team, updated)
                                 st.success("Team updated!")
                                 st.rerun(scope="fragment")
@@ -544,54 +539,70 @@ if show_scouting:
                         except ValueError:
                             pass
 
-                names_key = f"scout_names_{selected_team}"
                 fcol1, fcol2, _ = st.columns([2, 1, 1])
                 with fcol1:
                     fetch_clicked = st.button("Fetch scouting data from Stratz and OpenDota", type="primary", key="scout_fetch_btn")
                 with fcol2:
                     names_clicked = st.button("Fetch player names only", key="scout_names_btn")
 
+                def _set_fetched_names(fetched):
+                    """Fill in fetched names, keeping the ones the user edited."""
+                    for p in players:
+                        name = fetched.get(normalize_steam_id(p["steam_id"]), "")
+                        if name and not p.get("name_edited"):
+                            p["name"] = name
+                    save_scouting_team(config, username, selected_team, players)
+
                 if names_clicked:
                     with st.spinner(f"Fetching names for {len(players)} players..."):
                         try:
-                            names = fetch_player_names([p["steam_id"] for p in players])
-                            for p in players:
-                                sid = normalize_steam_id(p["steam_id"])
-                                if names.get(sid):
-                                    p["name"] = names[sid]
-                            save_scouting_team(config, username, selected_team, players)
-                            st.session_state[names_key] = names
+                            _set_fetched_names(fetch_player_names([p["steam_id"] for p in players]))
+                            st.success("Player names fetched!")
                         except Exception as e:
                             st.error(f"Error fetching names: {e}")
-
-                if names_key in st.session_state:
-                    names = st.session_state[names_key]
-                    st.dataframe(
-                        pd.DataFrame(
-                            [{"Steam ID": str(sid), "Name": name or "Unknown"} for sid, name in names.items()]
-                        ),
-                        hide_index=True,
-                    )
 
                 if fetch_clicked:
                     with st.spinner(f"Fetching data for {len(players)} players from Stratz and OpenDota..."):
                         try:
                             result = fetch_all_scouting_data(players)
                             st.session_state[scout_key] = result
-                            # Update player names from fetched data
-                            for p in players:
-                                sid = normalize_steam_id(p["steam_id"])
-                                fetched_name = result["player_names"].get(sid, "")
-                                if fetched_name:
-                                    p["name"] = fetched_name
-                            save_scouting_team(config, username, selected_team, players)
+                            _set_fetched_names(result["player_names"])
                             st.success("Data fetched successfully!")
                         except Exception as e:
                             st.error(f"Error fetching data: {e}")
 
+                # Roster: names shown instead of Steam IDs, editable
+                if players:
+                    edited_roster = st.data_editor(
+                        pd.DataFrame([
+                            {"Player": p.get("name", ""), "Steam ID": str(p["steam_id"])} for p in players
+                        ]),
+                        column_config={
+                            "Player": st.column_config.TextColumn("Player", help="Edit to rename the player"),
+                            "Steam ID": st.column_config.TextColumn("Steam ID", disabled=True),
+                        },
+                        hide_index=True,
+                        num_rows="fixed",
+                        key=f"scout_roster_{selected_team}",
+                    )
+                    if st.button("Save names", key="scout_save_names_btn"):
+                        for p, new_name in zip(players, edited_roster["Player"]):
+                            new_name = (new_name or "").strip()
+                            if new_name != p.get("name", ""):
+                                p["name"] = new_name
+                                # An empty name gets fetched again
+                                p["name_edited"] = bool(new_name)
+                        save_scouting_team(config, username, selected_team, players)
+                        st.success("Names saved!")
+
                 # Display results
                 if scout_key in st.session_state:
                     data = st.session_state[scout_key]
+                    # Roster names (fetched or edited) win over the ones cached with the data
+                    data = {**data, "player_names": {
+                        **data.get("player_names", {}),
+                        **{normalize_steam_id(p["steam_id"]): p["name"] for p in players if p.get("name")},
+                    }}
                     fetched_ts = data.get("fetched_at", "")
 
                     # Full composite image download
@@ -786,7 +797,7 @@ if show_scouting:
                         player_sids = [normalize_steam_id(p["steam_id"]) for p in players]
                         new_grid = scouting_grid_config(team, [
                             (
-                                scout_data.get("player_names", {}).get(sid) or p.get("name") or str(sid),
+                                p.get("name") or scout_data.get("player_names", {}).get(sid) or str(sid),
                                 scout_data.get("player_heroes", {}).get(sid, pd.DataFrame()),
                             )
                             for sid, p in zip(player_sids, players)
