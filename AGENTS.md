@@ -24,7 +24,7 @@ streamlit run streamlit_app.py          # http://localhost:8501
 
 | Command | What it runs | Time |
 |---|---|---|
-| `pytest` | Offline: scoring (`test_scoring.py`), daily snapshot assembly and upload with Stratz/GCS stubbed (`test_daily_fetch.py`), hero grid files (`test_hero_grid.py`) | ~10 s |
+| `pytest` | Offline: scoring (`test_scoring.py`), daily snapshot assembly and upload with Stratz/GCS stubbed (`test_daily_fetch.py`), hero grid files (`test_hero_grid.py`), OpenDota limiter and match merge (`test_opendota.py`) | ~10 s |
 | `pytest -m e2e` | The whole app in-process via Streamlit's `AppTest`: draft, accounts, hero lists, Pro Meta, Scouting, Config. Needs network and `STRATZ_API_TOKEN` | ~2 min |
 | `pytest -m cloud` | Read-only smoke test of the deployed service over its websocket, including data freshness (≤ 2 days). `EZDRAFT_URL` overrides the URL | ~30 s |
 
@@ -47,7 +47,8 @@ streamlit run streamlit_app.py          # http://localhost:8501
 | `get_data_from_stratz.py` | Stratz GraphQL client and shared constants: `STRATZ_API_URL`, `HEADERS`, `HEROES`, `BRACKETS`, `STRATZ_HERO_TO_ID`/`STRATZ_ID_TO_HERO`. Builds the daily matchup snapshot. Run directly, it writes `./<date>.yaml`. |
 | `fetch_and_upload.py` | Daily Cloud Run Job entrypoint. Calls `get_data_from_stratz()` and uploads to `gs://heroes-ezdraft/data/<YYYY-MM-DD>.yaml`. Stratz sometimes returns no matchups for 1–2 heroes for a whole day, which used to fail about 10% of runs. Their matchups are now copied from the latest snapshot (at most `MAX_FALLBACK_HEROES` = 5). Beyond that, or for a hero absent from that snapshot, the job fails and uploads nothing, because a partial snapshot breaks the app. |
 | `user_manager.py` | Accounts, hero lists and scouting teams. Everything is in one YAML at `USERS_PATH`: the private `gs://ezdraft-private/users.yaml` by default, or a local file via `EZDRAFT_USERS_PATH`. Also exports `_get_fs()` and `BUCKET` (the public bucket), which the app reuses for image uploads. |
-| `scouting_api.py` | Scouting tab backend: per-player Stratz match history (60 days, paginated), hero pools, team stacks, 5-stack tournament drafts, and PIL-rendered PNG reports. Also owns **`get_hero_icon_url()`**, which every tab uses. |
+| `scouting_api.py` | Scouting tab backend: per-player Stratz match history (60 days, paginated) merged with OpenDota's (`merge_opendota_matches`: deduplicated by match ID, fills Stratz anonymous players, adds OpenDota-only matches without pick/bans or league), hero pools, team stacks, 5-stack tournament drafts, and PIL-rendered PNG reports. Also owns **`get_hero_icon_url()`**, which every tab uses. |
+| `opendota_api.py` | Shared OpenDota client (`opendota_get`). Every OpenDota call goes through its process-wide limiter: 60 calls/min and 3000/day (free tier), also synced from OpenDota's `X-Rate-Limit-Remaining-*` headers. Past the daily limit it raises `OpenDotaDailyLimitError`, and Scouting then runs on Stratz alone. |
 | `pro_meta_api.py` | Pro Meta tab backend. Lists leagues through OpenDota SQL Explorer and fetches league matches from Stratz, falling back to OpenDota. Computes pick/ban/contest stats. `draft_to_html()` renders drafts for both Pro Meta and Scouting. |
 | `hero_grid.py` | Config tab backend. Reads and checks a Dota 2 `hero_grid_config.json` uploaded by the user (`load_hero_grid_config()`) and renders one of its grids as HTML (`hero_grid_to_html()`). `scouting_grid_config()` builds a grid from a scouted team: a row per player every 120, starting with an empty 20-high category named after the player, then one 80×80 single-hero category named `<games> <winrate>%` for each of the player's 12 most played heroes. It keeps the first 5 players only, so that no category goes lower than 600 (`SCOUT_MAX_HEIGHT`). The app never stores the file: added grids live in `st.session_state` (`config_added_<file id>`, and `config_replaced_<file id>` for the names of the file's grids they replaced: adding a team that already has a grid asks to replace it) and the user downloads the updated file (`dump_hero_grid_config()`). |
 | `heroes.yaml` | Hero → `nicknames` (used for draft input aliases) and `roles` (`p1`–`p5`, **currently unused**). |
@@ -74,7 +75,7 @@ Streamlit app (Cloud Run "ezdraft", europe-west1, GCP project "ezdraft")
     ├─ writes gs://heroes-ezdraft/scouting_images/    (shareable scouting PNGs)
     ├─ links  storage.googleapis.com/heroes-ezdraft/icons/<slug>.png  (public hero icons)
     ├─ Stratz GraphQL  (scouting, pro-meta league matches)  — Bearer token, 1 req/s self-throttle
-    └─ OpenDota        (league list/info via /explorer SQL, match fallback) — no auth
+    └─ OpenDota        (league list/info via /explorer SQL, match fallback, scouting match history) — no auth, 60/min and 3000/day
 ```
 
 **Rate limits.** The Stratz helpers `time.sleep(1)` before each request. The daily fetch also caps itself at 100 requests per minute (`MAX_CALLS_PER_MINUTE`). That job makes about 127 matchup calls plus 5 others, so it takes several minutes, and its task timeout is 600 s. Keep the throttling when you add Stratz calls.
@@ -133,7 +134,7 @@ The identifiers spell it `exceptionnal_*` (double n). Keep that spelling consist
   - Widget keys are prefixed by tab (`meta_*`, `scout_*`, `config_*`) to avoid collisions. Follow that pattern.
 - **Hero grid files** (`hero_grid_config.json`, from `Steam/userdata/<id>/570/remote/cfg/`): `{version, configs: [{config_name, categories: [{category_name, x_position, y_position, width, height, hero_ids}]}]}`. `hero_ids` are Dota hero IDs, the same as Stratz's (`STRATZ_ID_TO_HERO`). `load_hero_grid_config()` returns the file untouched so it can be written back.
 - **Draft dict format** is shared between `pro_meta_api.build_draft_table` and `scouting_api.build_scouting_drafts`: `{match_id, date, radiant, dire, winner, actions: [{order, type: "Pick"|"Ban", hero, icon, side: "Radiant"|"Dire", team}]}`. `draft_to_html()` and `generate_drafts_image()` both consume it.
-- **OpenDota fallback matches** have `position: None` and `steamAccountId: None`. The UI hides the `Pos *` columns when they're all zero.
+- **OpenDota fallback matches** have `position: None`, and `steamAccountId` only for players with a public profile. The UI hides the `Pos *` columns when they're all zero.
 - **Steam IDs** are normalized to 32-bit account IDs (`normalize_steam_id`), and both 32-bit and 64-bit input is accepted.
 - **Image rendering** loads DejaVu fonts from `/usr/share/fonts/truetype/dejavu/`. If those are missing it falls back to PIL's small default font, and `python:3.11-slim` may not ship them.
 - Commit messages in this repo are short and lowercase (`fix`, `add draft analysis`).

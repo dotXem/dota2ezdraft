@@ -9,6 +9,7 @@ from get_data_from_stratz import (
     STRATZ_API_URL, HEADERS, STRATZ_ID_TO_HERO, STRATZ_HERO_TO_ID
 )
 from scouting_api import get_hero_icon_url
+from opendota_api import opendota_get
 
 
 # ---------------------------------------------------------------------------
@@ -83,12 +84,9 @@ _MATCH_FIELDS = """
 """
 
 
-OPENDOTA_API_URL = "https://api.opendota.com/api"
-
-
 def lookup_league_info(league_id):
     """Look up league name and tier from OpenDota (works for new leagues)."""
-    r = requests.get(f"{OPENDOTA_API_URL}/leagues/{league_id}", timeout=15)
+    r = opendota_get(f"/leagues/{league_id}", timeout=15)
     if r.status_code == 200:
         data = r.json()
         return {
@@ -101,7 +99,7 @@ def lookup_league_info(league_id):
 
 def _opendota_sql(sql):
     """Run a SQL query against the OpenDota Explorer API."""
-    r = requests.get(f"{OPENDOTA_API_URL}/explorer", params={"sql": sql}, timeout=60)
+    r = opendota_get("/explorer", params={"sql": sql}, timeout=60)
     r.raise_for_status()
     data = r.json()
     if data.get("err"):
@@ -158,7 +156,7 @@ def _fetch_via_opendota(league_id):
     pm_rows = _opendota_sql(
         "SELECT m.match_id, m.start_time, m.radiant_win, "
         "m.radiant_team_id, m.dire_team_id, "
-        "pm.hero_id, pm.player_slot "
+        "pm.hero_id, pm.player_slot, pm.account_id "
         "FROM matches m "
         "JOIN player_matches pm ON m.match_id = pm.match_id "
         f"WHERE m.leagueid = {int(league_id)}"
@@ -216,7 +214,7 @@ def _fetch_via_opendota(league_id):
             "heroId": row["hero_id"],
             "isRadiant": is_radiant,
             "position": None,  # Not available from OpenDota
-            "steamAccountId": None,
+            "steamAccountId": row.get("account_id"),
         })
 
     # Build match objects in Stratz-compatible format

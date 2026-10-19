@@ -544,8 +544,8 @@ if show_scouting:
                         except ValueError:
                             pass
 
-                if st.button("Fetch scouting data from Stratz", type="primary", key="scout_fetch_btn"):
-                    with st.spinner(f"Fetching data for {len(players)} players from Stratz..."):
+                if st.button("Fetch scouting data from Stratz and OpenDota", type="primary", key="scout_fetch_btn"):
+                    with st.spinner(f"Fetching data for {len(players)} players from Stratz and OpenDota..."):
                         try:
                             result = fetch_all_scouting_data(players)
                             st.session_state[scout_key] = result
@@ -612,6 +612,12 @@ if show_scouting:
                             st.markdown(
                                 f"[Dotabuff]({dotabuff}) · [Stratz]({stratz_url}) · [OpenDota]({opendota})"
                             )
+                            sources = data.get("match_sources", {}).get(sid)
+                            if sources:
+                                st.caption(
+                                    f"Matches: {sources['stratz']} from Stratz, {sources['opendota']} from OpenDota, "
+                                    f"{sources['opendota_only']} found only on OpenDota"
+                                )
 
                             if hero_df.empty:
                                 st.warning("No matches found — profile may be private.")
