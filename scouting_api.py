@@ -1,4 +1,4 @@
-"""Stratz API integration for player and team scouting."""
+"""Stratz and OpenDota integration for player and team scouting."""
 
 import io
 import json
@@ -9,6 +9,7 @@ import pandas as pd
 from get_data_from_stratz import (
     STRATZ_API_URL, HEADERS, STRATZ_ID_TO_HERO, STRATZ_HERO_TO_ID
 )
+from opendota_api import opendota_get, OpenDotaDailyLimitError
 
 STEAM_ID_64_BASE = 76561197960265728
 
@@ -134,6 +135,142 @@ def fetch_player_data(session, steam_id):
         skip += 100
 
     return name, matches
+
+
+def fetch_player_names(steam_ids):
+    """
+    Fetch only the names of the given players: one Stratz call for all of them,
+    then OpenDota for the ones Stratz doesn't know. Pro names come first.
+    Returns {steam_id (32-bit): name or ""}.
+    """
+    session = requests.Session()
+    ids = [normalize_steam_id(s) for s in steam_ids]
+    names = {sid: "" for sid in ids}
+
+    query = """
+    {
+      players(steamAccountIds: [%s]) {
+        steamAccountId
+        steamAccount {
+          name
+          proSteamAccount { name }
+        }
+      }
+    }
+    """ % ", ".join(str(sid) for sid in ids)
+    data = _fetch_graphql(session, query)
+    try:
+        for p in (data or {}).get("data", {}).get("players") or []:
+            acct = p.get("steamAccount") or {}
+            pro = acct.get("proSteamAccount") or {}
+            sid = p.get("steamAccountId")
+            if sid in names:
+                names[sid] = pro.get("name") or acct.get("name") or ""
+    except (AttributeError, TypeError):
+        pass
+
+    for sid in ids:
+        if names[sid]:
+            continue
+        try:
+            r = opendota_get(f"/players/{sid}", timeout=15, session=session)
+        except (OpenDotaDailyLimitError, requests.RequestException):
+            break
+        if r.status_code != 200:
+            continue
+        profile = (r.json() or {}).get("profile") or {}
+        names[sid] = profile.get("name") or profile.get("personaname") or ""
+
+    return names
+
+
+def fetch_opendota_player_matches(session, steam_id):
+    """
+    Fetch the player's matches from the past 2 months on OpenDota (one call).
+    Returns a list of {match_id, player_slot, radiant_win, start_time, hero_id, lobby_type},
+    or [] if OpenDota fails or its daily limit is reached.
+    """
+    account_id = normalize_steam_id(steam_id)
+    params = {
+        "date": 60,
+        "significant": 0,  # keep every game mode, like the Stratz query
+        "project": ["match_id", "player_slot", "radiant_win", "start_time", "hero_id", "lobby_type"],
+    }
+    try:
+        r = opendota_get(f"/players/{account_id}/matches", params=params, timeout=30, session=session)
+    except (OpenDotaDailyLimitError, requests.RequestException):
+        return []
+    if r.status_code != 200:
+        return []
+    data = r.json()
+    return data if isinstance(data, list) else []
+
+
+def merge_opendota_matches(all_matches, opendota_matches):
+    """
+    Add OpenDota matches to the Stratz ones (Stratz match dict format), in place.
+
+    - A match Stratz already has is kept once. If Stratz lists the player as
+      anonymous, their account ID is filled in from OpenDota (same hero, same side).
+    - A match only OpenDota has becomes a partial match: no pick/bans, no league,
+      and only the scouted players OpenDota reported in it.
+    Returns {steam_id: number of matches added from OpenDota only}.
+    """
+    by_id = {}
+    for matches in all_matches.values():
+        for m in matches:
+            by_id.setdefault(m["id"], m)
+    own_ids = {sid: {m["id"] for m in ms} for sid, ms in all_matches.items()}
+    added = {sid: 0 for sid in all_matches}
+
+    for sid, rows in opendota_matches.items():
+        for row in rows:
+            mid = row.get("match_id")
+            hero_id = row.get("hero_id")
+            if not mid or not hero_id:
+                continue
+            is_radiant = row.get("player_slot", 0) < 128
+            m = by_id.get(mid)
+            if m is None:
+                m = {
+                    "id": mid,
+                    "startDateTime": row.get("start_time", 0),
+                    "didRadiantWin": row.get("radiant_win"),
+                    "lobbyType": row.get("lobby_type"),
+                    "leagueId": None,
+                    "radiantTeam": None,
+                    "direTeam": None,
+                    "pickBans": [],
+                    "players": [],
+                    "source": "opendota",
+                }
+                by_id[mid] = m
+                added[sid] += 1
+            elif m.get("source") == "opendota" and mid not in own_ids[sid]:
+                added[sid] += 1
+
+            players = m.setdefault("players", [])
+            if not any(p.get("steamAccountId") == sid for p in players):
+                anonymous = next(
+                    (p for p in players
+                     if p.get("heroId") == hero_id and not p.get("steamAccountId")),
+                    None,
+                )
+                if anonymous is not None:
+                    anonymous["steamAccountId"] = sid
+                else:
+                    players.append({
+                        "steamAccountId": sid,
+                        "heroId": hero_id,
+                        "isRadiant": is_radiant,
+                        "position": None,
+                    })
+
+            if mid not in own_ids[sid]:
+                all_matches[sid].append(m)
+                own_ids[sid].add(mid)
+
+    return added
 
 
 def compute_player_hero_stats(matches, steam_id):
@@ -348,10 +485,29 @@ def fetch_all_scouting_data(team_players):
     player_heroes = {}
     all_matches = {}
 
+    opendota_matches = {}
+
+    edited_names = {
+        normalize_steam_id(p["steam_id"]): p["name"]
+        for p in team_players if p.get("name_edited") and p.get("name")
+    }
+
     for sid in steam_ids:
         name, matches = fetch_player_data(session, sid)
-        player_names[sid] = name
+        player_names[sid] = edited_names.get(sid) or name
         all_matches[sid] = matches
+        opendota_matches[sid] = fetch_opendota_player_matches(session, sid)
+
+    stratz_counts = {sid: len(ms) for sid, ms in all_matches.items()}
+    opendota_only = merge_opendota_matches(all_matches, opendota_matches)
+    match_sources = {
+        sid: {
+            "stratz": stratz_counts[sid],
+            "opendota": len(opendota_matches[sid]),
+            "opendota_only": opendota_only[sid],
+        }
+        for sid in steam_ids
+    }
 
     # Build a merged match pool per player: their own matches + matches where
     # they appear in other players' data (covers private/partial profiles).
@@ -377,6 +533,7 @@ def fetch_all_scouting_data(team_players):
         "player_heroes": player_heroes,
         "team_games": team_games,
         "drafts": drafts,
+        "match_sources": match_sources,
         "fetched_at": datetime.datetime.utcnow().isoformat(),
     }
 

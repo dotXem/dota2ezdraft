@@ -137,7 +137,7 @@ def get_scouting_teams(config, username):
 
 
 def save_scouting_team(config, username, team_name, players):
-    """Save a scouting team. players: list of {'steam_id': int, 'name': str}."""
+    """Save a scouting team. players: list of {'steam_id': int, 'name': str, 'name_edited': bool (optional)}."""
     if "scouting_teams" not in config:
         config["scouting_teams"] = {}
     if username not in config["scouting_teams"]:

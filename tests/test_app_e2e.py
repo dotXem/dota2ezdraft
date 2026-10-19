@@ -164,10 +164,25 @@ def test_scouting(needs_stratz):
     assert all('scope="fragment"' in e for e in errors(at))
     at.run()
 
+    at.button(key="scout_names_btn").click().run()
+    assert not errors(at)
+    players = users()["scouting_teams"]["scout"]["Pro team"]["players"]
+    assert all(p["name"] for p in players)  # names only, without the full fetch
+    assert "scout_data_Pro team" not in at.session_state
+
+    # Rename the first player in the roster table
+    at.session_state["scout_roster_Pro team"] = {
+        "edited_rows": {0: {"Player": "Renamed"}}, "added_rows": [], "deleted_rows": [],
+    }
+    at.button(key="scout_save_names_btn").click().run()
+    first = users()["scouting_teams"]["scout"]["Pro team"]["players"][0]
+    assert first["name"] == "Renamed" and first["name_edited"], errors(at)
+
     at.button(key="scout_fetch_btn").click().run()
     assert any("fetched successfully" in s.value for s in at.success), errors(at)
     players = users()["scouting_teams"]["scout"]["Pro team"]["players"]
     assert all(p["name"] for p in players)  # names filled in from Stratz
+    assert players[0]["name"] == "Renamed"  # a fetch keeps edited names
     assert any("data:image/png;base64" in str(h.proto) for h in at.get("html"))
     assert user_manager._get_fs().exists("heroes-ezdraft/scouting_images/Pro_team_full.png")
 
