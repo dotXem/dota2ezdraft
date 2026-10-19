@@ -10,7 +10,7 @@ from st_files_connection import FilesConnection
 from hero_suggestion import *
 import streamlit_authenticator as stauth
 from user_manager import load_config, save_config, get_user_heroes, register_user, change_password, save_hero_list, delete_hero_list, is_scouting_user, get_scouting_teams, save_scouting_team, delete_scouting_team
-from scouting_api import fetch_all_scouting_data, normalize_steam_id, generate_player_image, generate_team_games_image, generate_full_scouting_image, get_hero_icon_url
+from scouting_api import fetch_all_scouting_data, fetch_player_names, normalize_steam_id, generate_player_image, generate_team_games_image, generate_full_scouting_image, get_hero_icon_url
 from pro_meta_api import fetch_recent_leagues, fetch_pro_meta, draft_to_html, lookup_league_info
 from hero_grid import load_hero_grid_config, dump_hero_grid_config, hero_grid_to_html, scouting_grid_config, SCOUT_MAX_PLAYERS
 
@@ -544,7 +544,36 @@ if show_scouting:
                         except ValueError:
                             pass
 
-                if st.button("Fetch scouting data from Stratz and OpenDota", type="primary", key="scout_fetch_btn"):
+                names_key = f"scout_names_{selected_team}"
+                fcol1, fcol2, _ = st.columns([2, 1, 1])
+                with fcol1:
+                    fetch_clicked = st.button("Fetch scouting data from Stratz and OpenDota", type="primary", key="scout_fetch_btn")
+                with fcol2:
+                    names_clicked = st.button("Fetch player names only", key="scout_names_btn")
+
+                if names_clicked:
+                    with st.spinner(f"Fetching names for {len(players)} players..."):
+                        try:
+                            names = fetch_player_names([p["steam_id"] for p in players])
+                            for p in players:
+                                sid = normalize_steam_id(p["steam_id"])
+                                if names.get(sid):
+                                    p["name"] = names[sid]
+                            save_scouting_team(config, username, selected_team, players)
+                            st.session_state[names_key] = names
+                        except Exception as e:
+                            st.error(f"Error fetching names: {e}")
+
+                if names_key in st.session_state:
+                    names = st.session_state[names_key]
+                    st.dataframe(
+                        pd.DataFrame(
+                            [{"Steam ID": str(sid), "Name": name or "Unknown"} for sid, name in names.items()]
+                        ),
+                        hide_index=True,
+                    )
+
+                if fetch_clicked:
                     with st.spinner(f"Fetching data for {len(players)} players from Stratz and OpenDota..."):
                         try:
                             result = fetch_all_scouting_data(players)

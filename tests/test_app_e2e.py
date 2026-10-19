@@ -164,6 +164,12 @@ def test_scouting(needs_stratz):
     assert all('scope="fragment"' in e for e in errors(at))
     at.run()
 
+    at.button(key="scout_names_btn").click().run()
+    assert not errors(at)
+    players = users()["scouting_teams"]["scout"]["Pro team"]["players"]
+    assert all(p["name"] for p in players)  # names only, without the full fetch
+    assert "scout_data_Pro team" not in at.session_state
+
     at.button(key="scout_fetch_btn").click().run()
     assert any("fetched successfully" in s.value for s in at.success), errors(at)
     players = users()["scouting_teams"]["scout"]["Pro team"]["players"]
