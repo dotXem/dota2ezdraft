@@ -137,6 +137,53 @@ def fetch_player_data(session, steam_id):
     return name, matches
 
 
+def fetch_player_names(steam_ids):
+    """
+    Fetch only the names of the given players: one Stratz call for all of them,
+    then OpenDota for the ones Stratz doesn't know. Pro names come first.
+    Returns {steam_id (32-bit): name or ""}.
+    """
+    session = requests.Session()
+    ids = [normalize_steam_id(s) for s in steam_ids]
+    names = {sid: "" for sid in ids}
+
+    query = """
+    {
+      players(steamAccountIds: [%s]) {
+        steamAccountId
+        steamAccount {
+          name
+          proSteamAccount { name }
+        }
+      }
+    }
+    """ % ", ".join(str(sid) for sid in ids)
+    data = _fetch_graphql(session, query)
+    try:
+        for p in (data or {}).get("data", {}).get("players") or []:
+            acct = p.get("steamAccount") or {}
+            pro = acct.get("proSteamAccount") or {}
+            sid = p.get("steamAccountId")
+            if sid in names:
+                names[sid] = pro.get("name") or acct.get("name") or ""
+    except (AttributeError, TypeError):
+        pass
+
+    for sid in ids:
+        if names[sid]:
+            continue
+        try:
+            r = opendota_get(f"/players/{sid}", timeout=15, session=session)
+        except (OpenDotaDailyLimitError, requests.RequestException):
+            break
+        if r.status_code != 200:
+            continue
+        profile = (r.json() or {}).get("profile") or {}
+        names[sid] = profile.get("name") or profile.get("personaname") or ""
+
+    return names
+
+
 def fetch_opendota_player_matches(session, steam_id):
     """
     Fetch the player's matches from the past 2 months on OpenDota (one call).
@@ -440,9 +487,14 @@ def fetch_all_scouting_data(team_players):
 
     opendota_matches = {}
 
+    edited_names = {
+        normalize_steam_id(p["steam_id"]): p["name"]
+        for p in team_players if p.get("name_edited") and p.get("name")
+    }
+
     for sid in steam_ids:
         name, matches = fetch_player_data(session, sid)
-        player_names[sid] = name
+        player_names[sid] = edited_names.get(sid) or name
         all_matches[sid] = matches
         opendota_matches[sid] = fetch_opendota_player_matches(session, sid)
 
