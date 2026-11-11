@@ -10,7 +10,7 @@ from st_files_connection import FilesConnection
 from hero_suggestion import *
 import streamlit_authenticator as stauth
 from user_manager import load_config, save_config, get_user_heroes, register_user, change_password, save_hero_list, delete_hero_list, is_scouting_user, get_scouting_teams, save_scouting_team, delete_scouting_team
-from scouting_api import fetch_all_scouting_data, fetch_player_names, normalize_steam_id, generate_player_image, generate_team_games_image, generate_full_scouting_image, get_hero_icon_url
+from scouting_api import fetch_all_scouting_data, fetch_player_names, normalize_steam_id, generate_player_image, generate_team_games_image, generate_full_scouting_image, get_hero_icon_url, team_games_to_html, drafts_to_html
 from pro_meta_api import fetch_recent_leagues, fetch_pro_meta, draft_to_html, lookup_league_info
 from hero_grid import load_hero_grid_config, dump_hero_grid_config, hero_grid_to_html, scouting_grid_config, SCOUT_MAX_PLAYERS
 
@@ -627,12 +627,30 @@ if show_scouting:
                     }}
                     fetched_ts = data.get("fetched_at", "")
 
-                    # Full composite image download
+                    # Hero pools as a hero grid, laid out like the Config tab (every player, no game height limit)
+                    pools_grid = scouting_grid_config(selected_team, [
+                        (
+                            data["player_names"].get(sid, str(sid)),
+                            data.get("player_heroes", {}).get(sid, pd.DataFrame()),
+                        )
+                        for sid in (normalize_steam_id(p["steam_id"]) for p in players)
+                    ], max_players=None)
+                    pools_html = hero_grid_to_html(pools_grid)
+                    if pools_html:
+                        st.caption("Each player's most played heroes in the past 2 months: games and winrate")
+                        st.html(pools_html)
+
+                    # Team games and tournament drafts, as in the old composite image
+                    games_html = team_games_to_html(data.get("team_games", pd.DataFrame()), selected_team)
+                    if games_html:
+                        st.html(games_html)
+                    drafts_html = drafts_to_html(data.get("drafts", []), selected_team)
+                    if drafts_html:
+                        st.html(drafts_html)
+
+                    # Full composite image: download and shareable link
                     full_img = generate_full_scouting_image(data, selected_team, players)
                     if full_img:
-                        import base64
-                        b64 = base64.b64encode(full_img).decode()
-                        st.html(f'<img src="data:image/png;base64,{b64}" style="width:100%;height:auto;">')
 
                         # Upload to GCS for shareable link
                         try:

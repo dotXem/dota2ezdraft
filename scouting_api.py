@@ -1,5 +1,6 @@
 """Stratz and OpenDota integration for player and team scouting."""
 
+import html
 import io
 import json
 import time
@@ -445,14 +446,18 @@ def build_scouting_drafts(all_player_matches, steam_ids):
         rad_win = match.get("didRadiantWin")
         winner = rad_team if rad_win else dire_team
 
-        pick_bans = sorted(match.get("pickBans") or [], key=lambda x: x.get("order", 0))
+        # Stratz sometimes sends no order: the list position stands in for it
+        pick_bans = sorted(
+            enumerate(match.get("pickBans") or []),
+            key=lambda ipb: ipb[1].get("order") if ipb[1].get("order") is not None else ipb[0],
+        )
         actions = []
-        for pb in pick_bans:
+        for position, pb in pick_bans:
             hid = pb.get("heroId")
             hero_name = STRATZ_ID_TO_HERO.get(hid, f"?{hid}")
             icon = get_hero_icon_url(hero_name) or ""
             actions.append({
-                "order": pb["order"],
+                "order": pb["order"] if pb.get("order") is not None else position,
                 "type": "Pick" if pb["isPick"] else "Ban",
                 "hero": hero_name,
                 "icon": icon,
@@ -466,6 +471,9 @@ def build_scouting_drafts(all_player_matches, steam_ids):
             "radiant": rad_team,
             "dire": dire_team,
             "winner": winner,
+            "winner_side": None if rad_win is None else "Radiant" if rad_win else "Dire",
+            # The side the scouted players were on
+            "team_side": "Radiant" if side_players is radiant else "Dire",
             "actions": actions,
         })
 
@@ -907,17 +915,12 @@ def generate_team_games_image(data, team_name):
         for pc in pos_cols:
             val = str(row.get(pc, ""))
             if val and val != "nan":
-                # Extract hero name from "Player (Hero)" format
-                hero_name = None
-                if "(" in val and val.endswith(")"):
-                    hero_name = val[val.rfind("(") + 1:-1]
-
-                hero_icon = _get_hero_icon(hero_name, ICON_SIZE) if hero_name else None
+                hero_name, player_part = split_team_game_label(val)
+                hero_icon = _get_hero_icon(hero_name, ICON_SIZE)
                 if hero_icon:
                     icon_y = y + (ROW_H - ICON_SIZE) // 2
                     img.paste(hero_icon, (x + 3, icon_y), hero_icon)
                     # Show player name (without hero) after icon
-                    player_part = val[:val.rfind("(")].strip()
                     draw.text((x + ICON_SIZE + 8, y + 12), player_part, fill="#e0e0e0", font=font)
                 else:
                     draw.text((x + 6, y + 12), val, fill="#e0e0e0", font=font)
@@ -932,6 +935,150 @@ def generate_team_games_image(data, team_name):
     img.save(buf, format="PNG")
     buf.seek(0)
     return buf.getvalue()
+
+
+def split_team_game_label(label):
+    """Split a team game position cell, "Hero (Player)" or just "Hero", into (hero, player)."""
+    if label.endswith(")") and " (" in label:
+        cut = label.rfind(" (")
+        return label[:cut], label[cut + 2:-1]
+    return label, ""
+
+
+# HTML views of the scouting results, laid out like the hero grids: sizes relative
+# to the container's width, so they scale with the page
+_HTML_BG = "#1a1a2e"
+_HTML_TEXT = "#e0e0e0"
+
+
+def _html_icon(hero, width, cqw, extra_style=""):
+    icon = get_hero_icon_url(hero) if hero else None
+    style = f"width:{cqw(width)};aspect-ratio:16/9;border-radius:{cqw(3)};flex:none;{extra_style}"
+    if icon:
+        return f'<img src="{icon}" title="{html.escape(hero)}" style="{style}object-fit:cover;">'
+    return (
+        f'<div title="{html.escape(hero or "")}" style="{style}background:#555;color:#eee;'
+        f'font-size:{cqw(9)};display:flex;align-items:center;justify-content:center;overflow:hidden;">'
+        f'{html.escape((hero or "?")[:6])}</div>'
+    )
+
+
+def team_games_to_html(team_games, team_name, limit=15):
+    """Render the team games table as HTML: a row per game, a hero icon and player per position."""
+    if team_games.empty:
+        return ""
+    games = team_games.head(limit)
+    total_w = 1200
+    cqw = lambda units: f"{units / total_w * 100:.3f}cqw"
+    # Date, tournament, players, 5 positions, result
+    cols = [120, 34, 30] + [190] * 5 + [66]
+    template = " ".join(cqw(c) for c in cols)
+    cell = f"padding:0 {cqw(5)};overflow:hidden;white-space:nowrap;text-overflow:ellipsis;"
+
+    def _row(cells, bg, bold=False):
+        weight = "font-weight:bold;" if bold else ""
+        return (
+            f'<div style="display:grid;grid-template-columns:{template};align-items:center;'
+            f'min-height:{cqw(44)};background:{bg};{weight}">' + "".join(cells) + "</div>"
+        )
+
+    head = _row(
+        [f'<div style="{cell}">{h}</div>' for h in ["Date", "T", "#", "Pos 1", "Pos 2", "Pos 3", "Pos 4", "Pos 5", "Result"]],
+        "#16213e", bold=True,
+    )
+    rows = ""
+    for i, (_, game) in enumerate(games.iterrows()):
+        tournament = str(game.get("Tournament", "") or "")
+        cells = [
+            f'<div style="{cell}">{html.escape(str(game["Date"]))}</div>',
+            f'<div style="{cell}color:#f0c040;font-weight:bold;">{"Yes" if tournament else ""}</div>',
+            f'<div style="{cell}">{int(game["# Players"])}</div>',
+        ]
+        for pos in ["Pos 1", "Pos 2", "Pos 3", "Pos 4", "Pos 5"]:
+            val = str(game.get(pos, "") or "")
+            if not val or val == "nan":
+                cells.append("<div></div>")
+                continue
+            hero, player = split_team_game_label(val)
+            cells.append(
+                f'<div style="{cell}display:flex;align-items:center;gap:{cqw(6)};">'
+                + _html_icon(hero, 60, cqw)
+                + f'<span style="overflow:hidden;text-overflow:ellipsis;">{html.escape(player or hero)}</span></div>'
+            )
+        result = str(game.get("Result", ""))
+        color = "#4ecca3" if result == "Won" else "#e84545" if result == "Lost" else _HTML_TEXT
+        cells.append(f'<div style="{cell}color:{color};font-weight:bold;">{html.escape(result)}</div>')
+        rows += _row(cells, "#0f3460" if i % 2 == 0 else _HTML_BG)
+
+    return (
+        f'<div style="width:100%;container-type:inline-size;">'
+        f'<div style="background:{_HTML_BG};color:{_HTML_TEXT};font-size:{cqw(13)};'
+        f'border-radius:{cqw(6)};padding:{cqw(10)};overflow:hidden;">'
+        f'<div style="font-weight:bold;font-size:{cqw(17)};margin-bottom:{cqw(8)};">'
+        f'{html.escape(team_name)} — Team Games ({len(games)} of {len(team_games)})</div>'
+        f'{head}{rows}</div></div>'
+    )
+
+
+def drafts_to_html(drafts, team_name, limit=15):
+    """Render tournament drafts as HTML: per game, a row of picks (green) and bans (red) per team."""
+    drafts = drafts[:limit]
+    if not drafts:
+        return ""
+    total_w = 1200
+    cqw = lambda units: f"{units / total_w * 100:.3f}cqw"
+    n_actions = max(max((a["order"] for a in d["actions"]), default=-1) + 1 for d in drafts) or 1
+    name_w, side_w = 150, 60
+    cell_w = (total_w - 20 - name_w - side_w) / n_actions
+    template = f"{cqw(name_w)} {cqw(side_w)} repeat({n_actions}, {cqw(cell_w)})"
+    ours = team_name.strip().lower()
+
+    body = ""
+    for draft in drafts:
+        by_order = {a["order"]: a for a in draft["actions"]}
+        body += (
+            f'<div style="color:#c0c0c0;font-size:{cqw(12)};margin:{cqw(8)} 0 {cqw(3)};">'
+            f'{html.escape(draft["date"])}</div>'
+        )
+        # Data fetched before team_side and winner_side existed falls back to the team names
+        our_side = draft.get("team_side") or ("Dire" if draft["dire"].strip().lower() == ours else "Radiant")
+        winner_side = draft.get("winner_side", "Radiant" if draft["winner"] == draft["radiant"] else "Dire")
+        sides = ["Radiant", "Dire"] if our_side == "Radiant" else ["Dire", "Radiant"]
+        for side in sides:
+            team = draft["radiant"] if side == "Radiant" else draft["dire"]
+            is_ours = side == our_side
+            name_bg = "#1e3c6e" if is_ours else "#16213e"
+            name_color = "#f0c040" if is_ours else _HTML_TEXT
+            label = f"padding:0 {cqw(5)};overflow:hidden;white-space:nowrap;text-overflow:ellipsis;background:{name_bg};color:{name_color};"
+            trophy = "🏆 " if side == winner_side else ""
+            cells = [
+                f'<div style="{label}font-weight:bold;" title="{html.escape(team)}">{trophy}{html.escape(team)}</div>',
+                f'<div style="{label}">{side}</div>',
+            ]
+            for order in range(n_actions):
+                a = by_order.get(order)
+                if a and a["side"] == side:
+                    bg = "#2e7d32" if a["type"] == "Pick" else "#c62828"
+                    cells.append(
+                        f'<div style="background:{bg};padding:{cqw(2)};display:flex;justify-content:center;">'
+                        + _html_icon(a["hero"], cell_w - 4, cqw)
+                        + "</div>"
+                    )
+                else:
+                    cells.append("<div></div>")
+            body += (
+                f'<div style="display:grid;grid-template-columns:{template};align-items:stretch;'
+                f'line-height:{cqw(26)};">' + "".join(cells) + "</div>"
+            )
+
+    return (
+        f'<div style="width:100%;container-type:inline-size;">'
+        f'<div style="background:{_HTML_BG};color:{_HTML_TEXT};font-size:{cqw(13)};'
+        f'border-radius:{cqw(6)};padding:{cqw(10)};overflow:hidden;">'
+        f'<div style="font-weight:bold;font-size:{cqw(17)};">'
+        f'{html.escape(team_name)} — Tournament Drafts ({len(drafts)} games)</div>'
+        f'{body}</div></div>'
+    )
 
 
 def generate_drafts_image(data, team_name):
