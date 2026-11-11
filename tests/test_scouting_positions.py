@@ -2,7 +2,7 @@
 
 from scouting_api import (
     compute_player_hero_stats, extract_player_games, filter_hero_pools, generate_player_image,
-    hero_stats, roster_positions,
+    hero_stats, roster_positions, team_hero_list,
 )
 
 A, B = 111, 222
@@ -89,3 +89,15 @@ def test_player_image_with_positions():
         "player_positions": {A: [1]},
     }
     assert generate_player_image(data, A).startswith(b"\x89PNG")
+
+
+def test_team_hero_list():
+    pools = {A: hero_stats(extract_player_games(MATCHES, A)), B: hero_stats(extract_player_games(MATCHES, B))}
+    # Roster order, then most played first, without duplicates (B's Lion is A's too)
+    assert team_hero_list(pools, [A, B]) == ["Axe", "Anti-Mage", "Lion"]
+    assert team_hero_list(pools, [B, A]) == ["Lion", "Axe", "Anti-Mage"]
+    assert team_hero_list(pools, [A, B], top_n=1) == ["Axe", "Lion"]
+    assert team_hero_list(pools, [A, B], min_games=2) == ["Axe", "Anti-Mage", "Lion"]  # B: 6 Lion games
+    assert team_hero_list(pools, [A], min_games=3) == ["Axe"]
+    # Players without data, or with an empty pool, add nothing
+    assert team_hero_list({A: hero_stats(extract_player_games([], A))}, [A, 999]) == []

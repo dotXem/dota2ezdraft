@@ -203,6 +203,25 @@ def test_scouting(needs_stratz):
     at.toggle(key="scout_pos_filter").set_value(False).run()
     assert not errors(at) and not pos_captions()
 
+    # The team's most played heroes saved as a hero list, which the Draft tab can filter on
+    at.number_input(key="scout_list_top").set_value(3).run()
+    at.button(key="scout_list_btn").click().run()
+    assert not errors(at)
+    saved = users()["heroes_lists"]["scout"]["Pro team"]
+    assert 0 < len(saved) <= 15 and len(set(saved)) == len(saved)
+    assert any("Hero list 'Pro team' saved" in s.value for s in at.success)
+    assert "Pro team" in by_label(at.selectbox, "Select filter list").options
+
+    # One list per player, named after the team and the player
+    at.button(key="scout_player_lists_btn").click().run()
+    assert not errors(at)
+    lists = users()["heroes_lists"]["scout"]
+    assert "Pro team - Renamed" in lists
+    player_lists = [name for name in lists if name.startswith("Pro team - ")]
+    assert 0 < len(player_lists) <= 5 and all(0 < len(lists[n]) <= 3 for n in player_lists)
+    assert set().union(*(lists[n] for n in player_lists)) == set(lists["Pro team"])
+    assert "Pro team - Renamed" in by_label(at.selectbox, "Select filter list").options
+
 
 def test_config():
     config = user_manager.load_config()
