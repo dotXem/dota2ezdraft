@@ -10,7 +10,7 @@ from st_files_connection import FilesConnection
 from hero_suggestion import *
 import streamlit_authenticator as stauth
 from user_manager import load_config, save_config, get_user_heroes, register_user, change_password, save_hero_list, delete_hero_list, is_scouting_user, get_scouting_teams, save_scouting_team, delete_scouting_team
-from scouting_api import fetch_all_scouting_data, fetch_player_names, normalize_steam_id, generate_player_image, generate_team_games_image, generate_full_scouting_image, get_hero_icon_url, team_games_to_html, drafts_to_html
+from scouting_api import fetch_all_scouting_data, fetch_player_names, normalize_steam_id, filter_hero_pools, roster_positions, POSITIONS, generate_player_image, generate_team_games_image, generate_full_scouting_image, get_hero_icon_url, team_games_to_html, drafts_to_html
 from pro_meta_api import fetch_recent_leagues, fetch_pro_meta, draft_to_html, lookup_league_info
 from hero_grid import load_hero_grid_config, dump_hero_grid_config, hero_grid_to_html, scouting_grid_config, SCOUT_MAX_PLAYERS
 
@@ -593,29 +593,46 @@ if show_scouting:
                         except Exception as e:
                             st.error(f"Error fetching data: {e}")
 
-                # Roster: names shown instead of Steam IDs, editable
+                # Roster: names shown instead of Steam IDs, and positions, editable
                 if players:
                     edited_roster = st.data_editor(
                         pd.DataFrame([
-                            {"Player": p.get("name", ""), "Steam ID": str(p["steam_id"])} for p in players
+                            {
+                                "Player": p.get("name", ""),
+                                "Positions": [str(pos) for pos in roster_positions(p)],
+                                "Steam ID": str(p["steam_id"]),
+                            }
+                            for p in players
                         ]),
                         column_config={
                             "Player": st.column_config.TextColumn("Player", help="Edit to rename the player"),
+                            "Positions": st.column_config.MultiselectColumn(
+                                "Positions",
+                                help="The positions this player plays for the team. Their hero pool "
+                                     "only counts games at these positions. Empty means every position.",
+                                options=[str(pos) for pos in POSITIONS],
+                                format_func=lambda pos: f"Pos {pos}",
+                            ),
                             "Steam ID": st.column_config.TextColumn("Steam ID", disabled=True),
                         },
                         hide_index=True,
                         num_rows="fixed",
                         key=f"scout_roster_{selected_team}",
                     )
-                    if st.button("Save names", key="scout_save_names_btn"):
-                        for p, new_name in zip(players, edited_roster["Player"]):
+                    if st.button("Save roster", key="scout_save_roster_btn"):
+                        for p, new_name, new_positions in zip(
+                            players, edited_roster["Player"], edited_roster["Positions"]
+                        ):
                             new_name = (new_name or "").strip()
                             if new_name != p.get("name", ""):
                                 p["name"] = new_name
                                 # An empty name gets fetched again
                                 p["name_edited"] = bool(new_name)
+                            p["positions"] = roster_positions({"positions": new_positions})
+                            if not p["positions"]:
+                                del p["positions"]
                         save_scouting_team(config, username, selected_team, players)
-                        st.success("Names saved!")
+                        st.success("Roster saved!")
 
                 # Display results
                 if scout_key in st.session_state:
@@ -627,6 +644,23 @@ if show_scouting:
                     }}
                     fetched_ts = data.get("fetched_at", "")
 
+                    # Hero pools limited to each player's roster positions
+                    left_out = {}
+                    if any(roster_positions(p) for p in players):
+                        if st.toggle(
+                            "Only count games at each player's roster positions",
+                            value=True,
+                            key="scout_pos_filter",
+                        ):
+                            if "player_games" not in data:
+                                st.caption("This data was fetched before positions were kept: fetch it again to filter by position.")
+                            pools, left_out = filter_hero_pools(data, players)
+                            # player_positions titles the player images
+                            data = {**data, "player_heroes": pools, "player_positions": {
+                                sid: roster_positions(p) for p in players
+                                if (sid := normalize_steam_id(p["steam_id"])) in left_out
+                            }}
+
                     # Hero pools as a hero grid, laid out like the Config tab (every player, no game height limit)
                     pools_grid = scouting_grid_config(selected_team, [
                         (
@@ -637,7 +671,8 @@ if show_scouting:
                     ], max_players=None)
                     pools_html = hero_grid_to_html(pools_grid)
                     if pools_html:
-                        st.caption("Each player's most played heroes in the past 2 months: games and winrate")
+                        at_positions = " at their roster positions" if left_out else ""
+                        st.caption(f"Each player's most played heroes{at_positions} in the past 2 months: games and winrate")
                         st.html(pools_html)
 
                     # Team games and tournament drafts, as in the old composite image
@@ -699,12 +734,24 @@ if show_scouting:
                                     f"{sources['opendota_only']} found only on OpenDota"
                                 )
 
-                            if hero_df.empty:
+                            positions = data.get("player_positions", {}).get(sid)
+                            if sid in left_out:
+                                st.caption(
+                                    f"Pos {'/'.join(map(str, positions))} only: left out "
+                                    f"{left_out[sid]['other']} games at other positions and "
+                                    f"{left_out[sid]['unknown']} without a known position"
+                                )
+
+                            if hero_df.empty and sum(left_out.get(sid, {}).values()):
+                                st.warning(f"No games at Pos {'/'.join(map(str, positions))} in the past 2 months.")
+                            elif hero_df.empty:
                                 st.warning("No matches found — profile may be private.")
                             else:
                                 st.markdown(f"**Heroes played in the past 2 months ({len(hero_df)} heroes):**")
+                                # Positions nobody played (or that the filter left out) take no room
+                                empty_pos = [c for c in hero_df.columns if c.startswith("Pos ") and not hero_df[c].any()]
                                 st.dataframe(
-                                    hero_df,
+                                    hero_df.drop(columns=empty_pos),
                                     column_config={
                                         "Icon": st.column_config.ImageColumn("", width="small"),
                                         "Winrate": st.column_config.NumberColumn(format="%.1f%%"),
@@ -821,6 +868,13 @@ if show_scouting:
                     team = st.selectbox("Scouted team", list(teams), key="config_team_sel")
                 with bcol:
                     add_clicked = st.button("Add a grid from this team", key="config_add_btn")
+                by_position = False
+                if any(roster_positions(p) for p in teams[team].get("players", [])):
+                    by_position = st.toggle(
+                        "Only count games at each player's roster positions",
+                        value=True,
+                        key="config_pos_filter",
+                    )
                 if add_clicked:
                     # Asked again below if this team has a grid already
                     st.session_state.pop(pending_key, None)
@@ -835,10 +889,14 @@ if show_scouting:
                     if scout_key in st.session_state:
                         scout_data = st.session_state[scout_key]
                         player_sids = [normalize_steam_id(p["steam_id"]) for p in players]
+                        if by_position:
+                            pools, _ = filter_hero_pools(scout_data, players)
+                        else:
+                            pools = scout_data.get("player_heroes", {})
                         new_grid = scouting_grid_config(team, [
                             (
                                 p.get("name") or scout_data.get("player_names", {}).get(sid) or str(sid),
-                                scout_data.get("player_heroes", {}).get(sid, pd.DataFrame()),
+                                pools.get(sid, pd.DataFrame()),
                             )
                             for sid, p in zip(player_sids, players)
                         ])

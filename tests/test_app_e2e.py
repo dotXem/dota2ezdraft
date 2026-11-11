@@ -175,13 +175,14 @@ def test_scouting(needs_stratz):
     assert all(p["name"] for p in players)  # names only, without the full fetch
     assert "scout_data_Pro team" not in at.session_state
 
-    # Rename the first player in the roster table
+    # Rename the first player in the roster table and set their position
     at.session_state["scout_roster_Pro team"] = {
-        "edited_rows": {0: {"Player": "Renamed"}}, "added_rows": [], "deleted_rows": [],
+        "edited_rows": {0: {"Player": "Renamed", "Positions": ["1"]}}, "added_rows": [], "deleted_rows": [],
     }
-    at.button(key="scout_save_names_btn").click().run()
-    first = users()["scouting_teams"]["scout"]["Pro team"]["players"][0]
+    at.button(key="scout_save_roster_btn").click().run()
+    first, second = users()["scouting_teams"]["scout"]["Pro team"]["players"][:2]
     assert first["name"] == "Renamed" and first["name_edited"], errors(at)
+    assert first["positions"] == [1] and "positions" not in second
 
     at.button(key="scout_fetch_btn").click().run()
     assert any("fetched successfully" in s.value for s in at.success), errors(at)
@@ -191,13 +192,24 @@ def test_scouting(needs_stratz):
     assert any("container-type:inline-size" in str(h.proto) for h in at.get("html"))  # hero pools grid
     assert user_manager._get_fs().exists("heroes-ezdraft/scouting_images/Pro_team_full.png")
 
+    # The first player's pool only counts their Pos 1 games, unless the filter is off
+    def pos_captions():
+        return [c.value for c in at.caption if c.value.startswith("Pos 1 only")]
+
+    assert len(pos_captions()) == 1, errors(at)
+    positions = next(iter(at.session_state["scout_data_Pro team"]["player_games"].values()))["Position"]
+    other, unknown = ((positions != 1) & (positions != 0)).sum(), (positions == 0).sum()
+    assert f"left out {other} games at other positions and {unknown} without" in pos_captions()[0]
+    at.toggle(key="scout_pos_filter").set_value(False).run()
+    assert not errors(at) and not pos_captions()
+
 
 def test_config():
     config = user_manager.load_config()
     user_manager.register_user(config, "gridder", "Gridder", "password123")
     config["scouting_users"] = config.get("scouting_users", []) + ["gridder"]
     config.setdefault("scouting_teams", {})["gridder"] = {"Rivals": {"players": [
-        {"steam_id": 111, "name": "One"}, {"steam_id": 222, "name": "Two"},
+        {"steam_id": 111, "name": "One", "positions": [3]}, {"steam_id": 222, "name": "Two"},
     ]}}
     user_manager.save_config(config)
 
@@ -267,3 +279,22 @@ def test_config():
     assert grids.options == ["Mine", "Team", "Rivals"]
     assert grids.value == 2
     assert at.dataframe[-1].value["Category"].tolist()[-1] == "5 100%"
+
+    # With a row per game, the grid only counts One's games at Pos 3, unless the filter is off
+    at.session_state["scout_data_Rivals"]["player_games"] = {
+        111: pd.DataFrame(
+            [("Axe", 3, w, 0) for w in (True, False, False)] + [("Anti-Mage", 1, i < 7, 0) for i in range(12)],
+            columns=["Hero", "Position", "Won", "Start"],
+        ),
+        222: pd.DataFrame([("Lion", 5, True, 0)] * 5, columns=["Hero", "Position", "Won", "Start"]),
+    }
+    at.button(key="config_add_btn").click().run()
+    by_label(at.button, "Replace").click().run()
+    assert not errors(at)
+    assert at.dataframe[-1].value["Category"].tolist() == ["One", "3 33%", "Two", "5 100%"]
+
+    at.toggle(key="config_pos_filter").set_value(False).run()
+    at.button(key="config_add_btn").click().run()
+    by_label(at.button, "Replace").click().run()
+    assert not errors(at)
+    assert at.dataframe[-1].value["Category"].tolist() == ["One", "12 58%", "3 33%", "Two", "5 100%"]
