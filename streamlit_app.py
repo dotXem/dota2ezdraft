@@ -9,8 +9,8 @@ from get_data_from_stratz import HEROES, BRACKETS, STRATZ_ID_TO_HERO
 from st_files_connection import FilesConnection
 from hero_suggestion import *
 import streamlit_authenticator as stauth
-from user_manager import load_config, save_config, get_user_heroes, register_user, change_password, save_hero_list, delete_hero_list, is_scouting_user, get_scouting_teams, save_scouting_team, delete_scouting_team
-from scouting_api import fetch_all_scouting_data, fetch_player_names, normalize_steam_id, filter_hero_pools, roster_positions, POSITIONS, generate_player_image, generate_team_games_image, generate_full_scouting_image, get_hero_icon_url, team_games_to_html, drafts_to_html
+from user_manager import load_config, save_config, get_user_heroes, register_user, change_password, save_hero_list, save_hero_lists, delete_hero_list, is_scouting_user, get_scouting_teams, save_scouting_team, delete_scouting_team
+from scouting_api import fetch_all_scouting_data, fetch_player_names, normalize_steam_id, filter_hero_pools, roster_positions, POSITIONS, generate_player_image, generate_team_games_image, generate_full_scouting_image, get_hero_icon_url, team_games_to_html, drafts_to_html, team_hero_list
 from pro_meta_api import fetch_recent_leagues, fetch_pro_meta, draft_to_html, lookup_league_info
 from hero_grid import load_hero_grid_config, dump_hero_grid_config, hero_grid_to_html, scouting_grid_config, SCOUT_MAX_PLAYERS
 
@@ -674,6 +674,92 @@ if show_scouting:
                         at_positions = " at their roster positions" if left_out else ""
                         st.caption(f"Each player's most played heroes{at_positions} in the past 2 months: games and winrate")
                         st.html(pools_html)
+
+                    # Hero list from the team's hero pools, for the Draft tab filter
+                    saved_msg = st.session_state.pop("scout_list_saved", None)
+                    if saved_msg:
+                        st.success(saved_msg)
+                    with st.expander("Save the team's heroes as a hero list"):
+                        lcol1, lcol2, lcol3 = st.columns([2, 1, 1])
+                        with lcol1:
+                            list_name = st.text_input(
+                                "List name", value=selected_team, key=f"scout_list_name_{selected_team}"
+                            ).strip()
+                        with lcol2:
+                            list_top = st.number_input(
+                                "Heroes per player", min_value=1, max_value=50, value=12, key="scout_list_top"
+                            )
+                        with lcol3:
+                            list_min_games = st.number_input(
+                                "Min. games", min_value=1, max_value=50, value=1, key="scout_list_min_games"
+                            )
+                        team_heroes = team_hero_list(
+                            data.get("player_heroes", {}), [p["steam_id"] for p in players],
+                            top_n=int(list_top), min_games=int(list_min_games),
+                        )
+                        at_positions = " at their roster positions" if left_out else ""
+                        st.caption(
+                            f"Each player's {int(list_top)} most played heroes{at_positions} with at least "
+                            f"{int(list_min_games)} game{'s' if list_min_games > 1 else ''}: "
+                            f"{len(team_heroes)} heroes. Use the list as the Draft tab filter."
+                        )
+                        if team_heroes:
+                            st.markdown(", ".join(team_heroes))
+
+                        # One list per player, named "<list name> - <player>"; players without heroes get none
+                        player_lists = {}
+                        for p in players:
+                            sid = normalize_steam_id(p["steam_id"])
+                            p_heroes = team_hero_list(
+                                data.get("player_heroes", {}), [sid],
+                                top_n=int(list_top), min_games=int(list_min_games),
+                            )
+                            if p_heroes:
+                                p_list_name = f"{list_name} - {data['player_names'].get(sid, str(sid))}"
+                                if p_list_name in player_lists:  # two players with the same name
+                                    p_list_name += f" ({sid})"
+                                player_lists[p_list_name] = p_heroes
+                        if player_lists:
+                            st.caption("One list per player: " + ", ".join(
+                                f"'{name}' ({len(h)})" for name, h in player_lists.items()
+                            ))
+
+                        exists = list_name in user_heroes
+                        existing_players = [name for name in player_lists if name in user_heroes]
+                        if exists:
+                            st.warning(f"You already have a list named '{list_name}': saving replaces it.")
+                        if existing_players:
+                            st.warning(
+                                "Saving one list per player replaces your lists "
+                                + ", ".join(f"'{name}'" for name in existing_players) + "."
+                            )
+                        bcol1, bcol2, _ = st.columns([1, 1, 2])
+                        with bcol1:
+                            team_clicked = st.button(
+                                "Replace hero list" if exists else "Create hero list",
+                                key="scout_list_btn",
+                                disabled=not (list_name and team_heroes),
+                            )
+                        with bcol2:
+                            players_clicked = st.button(
+                                "One list per player",
+                                key="scout_player_lists_btn",
+                                disabled=not (list_name and player_lists),
+                            )
+                        if team_clicked:
+                            save_hero_list(config, username, list_name, team_heroes)
+                            st.session_state["scout_list_saved"] = (
+                                f"Hero list '{list_name}' saved with {len(team_heroes)} heroes."
+                            )
+                        if players_clicked:
+                            save_hero_lists(config, username, player_lists)
+                            st.session_state["scout_list_saved"] = (
+                                f"{len(player_lists)} hero lists saved: "
+                                + ", ".join(f"'{name}'" for name in player_lists) + "."
+                            )
+                        if team_clicked or players_clicked:
+                            # Whole app, so that the Draft and My Hero Lists tabs see the new lists
+                            st.rerun()
 
                     # Team games and tournament drafts, as in the old composite image
                     games_html = team_games_to_html(data.get("team_games", pd.DataFrame()), selected_team)

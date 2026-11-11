@@ -106,9 +106,12 @@ def change_password(config, username, current_password, new_password):
 
 def save_hero_list(config, username, list_name, heroes):
     """Create or update a hero list."""
-    if username not in config.get("heroes_lists", {}):
-        config["heroes_lists"][username] = {}
-    config["heroes_lists"][username][list_name] = heroes
+    save_hero_lists(config, username, {list_name: heroes})
+
+
+def save_hero_lists(config, username, lists):
+    """Create or update several hero lists ({list name: heroes}) in one save."""
+    config.setdefault("heroes_lists", {}).setdefault(username, {}).update(lists)
     save_config(config)
 
 

@@ -8,7 +8,7 @@ import datetime
 import requests
 import pandas as pd
 from get_data_from_stratz import (
-    STRATZ_API_URL, HEADERS, STRATZ_ID_TO_HERO, STRATZ_HERO_TO_ID
+    STRATZ_API_URL, HEADERS, HEROES, STRATZ_ID_TO_HERO, STRATZ_HERO_TO_ID
 )
 from opendota_api import opendota_get, OpenDotaDailyLimitError
 
@@ -376,6 +376,31 @@ def filter_hero_pools(data, players):
         unknown = games["Position"] == 0
         left_out[sid] = {"other": int((~kept & ~unknown).sum()), "unknown": int(unknown.sum())}
     return heroes, left_out
+
+
+def team_hero_list(player_heroes, steam_ids, top_n=12, min_games=1):
+    """
+    Heroes from a team's hero pools, for a hero list.
+
+    Takes each player's top_n most played heroes (None for all of them) with at
+    least min_games games, in roster order then most played first, without
+    duplicates. Heroes missing from HEROES are left out, since hero lists only
+    hold known hero names.
+    """
+    known = set(HEROES)
+    result = []
+    for sid in steam_ids:
+        df = player_heroes.get(normalize_steam_id(sid))
+        if df is None or df.empty:
+            continue
+        df = df[(df["Games"] >= min_games) & df["Hero"].isin(known)]
+        df = df.sort_values(["Games", "Wins"], ascending=False, kind="stable")
+        if top_n is not None:
+            df = df.head(top_n)
+        for hero in df["Hero"]:
+            if hero not in result:
+                result.append(hero)
+    return result
 
 
 def find_team_games(all_player_matches, steam_ids, player_names):
