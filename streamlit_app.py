@@ -414,6 +414,28 @@ with meta_tab:
                     pos_cols = [c for c in display_stats.columns if c.startswith("Pos ")]
                     if pos_cols and display_stats[pos_cols].sum().sum() == 0:
                         display_stats = display_stats.drop(columns=pos_cols)
+                        st.caption("Stratz has no position data for these matches yet.")
+                    else:
+                        position_filters = {
+                            "All positions": None,
+                            "Pos 1 (Carry)": "Pos 1",
+                            "Pos 2 (Mid)": "Pos 2",
+                            "Pos 3 (Offlane)": "Pos 3",
+                            "Pos 4 (Soft support)": "Pos 4",
+                            "Pos 5 (Hard support)": "Pos 5",
+                        }
+                        pos_label = st.selectbox(
+                            "Position", list(position_filters.keys()), key="meta_pos_filter"
+                        )
+                        pos_col = position_filters[pos_label]
+                        if pos_col:
+                            display_stats = display_stats[display_stats[pos_col] > 0]
+                        known = meta_data["matches_with_positions"]
+                        if known < total_matches:
+                            st.caption(
+                                f"Positions known for {known} of {total_matches} matches. "
+                                "Stratz has no positions for the others yet, so the Pos columns don't count them."
+                            )
                     st.dataframe(
                         display_stats,
                         column_config={

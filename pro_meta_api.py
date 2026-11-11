@@ -232,11 +232,67 @@ def _fetch_via_opendota(league_id):
     return matches
 
 
+POSITIONS = ["POSITION_1", "POSITION_2", "POSITION_3", "POSITION_4", "POSITION_5"]
+_POSITIONS_PER_REQUEST = 100
+
+
+def _fetch_positions_via_stratz(match_ids):
+    """Return {match_id: {heroId: "POSITION_n"}} for the matches Stratz has parsed.
+
+    Stratz has positions for most pro matches even when it has no record of
+    their league. Its matches(ids:) query needs admin rights, so each match is
+    requested under its own alias, many per request.
+    """
+    match_ids = list(match_ids)
+    positions = {}
+    for i in range(0, len(match_ids), _POSITIONS_PER_REQUEST):
+        chunk = match_ids[i:i + _POSITIONS_PER_REQUEST]
+        q = "{ %s }" % " ".join(
+            "m%d: match(id: %d) { id players { heroId position } }" % (mid, mid)
+            for mid in map(int, chunk)
+        )
+        data = _gql(q)
+        for m in data["data"].values():
+            if not m:
+                continue  # Stratz doesn't have this match
+            by_hero = {
+                p["heroId"]: p["position"]
+                for p in (m.get("players") or [])
+                if p.get("position") in POSITIONS
+            }
+            if by_hero:
+                positions[m["id"]] = by_hero
+    return positions
+
+
+def _add_stratz_positions(matches):
+    """Fill player positions in OpenDota matches from Stratz, where it has them."""
+    try:
+        positions = _fetch_positions_via_stratz(m["id"] for m in matches)
+    except (requests.RequestException, RuntimeError) as e:
+        import logging
+        logging.error(f"Stratz positions failed: {e}")
+        return  # positions stay unknown, the rest of the stats still work
+    for m in matches:
+        by_hero = positions.get(m["id"], {})
+        for p in m["players"]:
+            p["position"] = by_hero.get(p["heroId"])
+
+
+def count_matches_with_positions(matches):
+    """Number of matches where every player has a known position (pos 1-5)."""
+    return sum(
+        1 for m in matches
+        if m.get("players") and all(p.get("position") in POSITIONS for p in m["players"])
+    )
+
+
 def fetch_league_matches(league_id, progress_cb=None):
     """Fetch all matches from a league.
 
     Tries Stratz league query first (fast). If the league isn't indexed
-    in Stratz yet, falls back to OpenDota SQL Explorer (3 bulk queries).
+    in Stratz yet, falls back to OpenDota SQL Explorer (3 bulk queries),
+    with player positions added from Stratz match by match.
 
     progress_cb is accepted for API compatibility but the OpenDota path
     is fast enough not to need it.
@@ -246,8 +302,12 @@ def fetch_league_matches(league_id, progress_cb=None):
     if result is not None:
         return result
 
-    # Fallback: 100% OpenDota via SQL Explorer
-    return _fetch_via_opendota(league_id)
+    # Fallback: OpenDota via SQL Explorer, which has no positions.
+    # As of 2026-10, Stratz has no league record for most big tournaments
+    # (TI 2025 and 2026 included), so this is the usual path.
+    matches = _fetch_via_opendota(league_id)
+    _add_stratz_positions(matches)
+    return matches
 
 
 # ---------------------------------------------------------------------------
@@ -458,6 +518,7 @@ def fetch_pro_meta(league_id, progress_cb=None):
     return {
         "league_id": league_id,
         "total_matches": total_matches,
+        "matches_with_positions": count_matches_with_positions(matches),
         "hero_stats": hero_stats,
         "drafts": drafts,
         "matches_raw": matches,

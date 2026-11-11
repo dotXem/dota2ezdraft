@@ -130,6 +130,11 @@ def test_pro_meta(needs_stratz):
     assert len(at.dataframe) >= 2  # draft suggestions + hero contest stats
     assert at.get("html")  # recent drafts
 
+    # Positions come from Stratz, and the filter keeps only heroes played there
+    at.selectbox(key="meta_pos_filter").set_value("Pos 1 (Carry)").run()
+    hero_stats = at.dataframe[-1].value
+    assert len(hero_stats) and (hero_stats["Pos 1"] > 0).all(), errors(at)
+
 
 def pro_team_steam_ids():
     """Five players who were on the same side of a recent pro match."""
