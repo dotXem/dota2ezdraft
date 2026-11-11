@@ -188,7 +188,7 @@ def test_scouting(needs_stratz):
     players = users()["scouting_teams"]["scout"]["Pro team"]["players"]
     assert all(p["name"] for p in players)  # names filled in from Stratz
     assert players[0]["name"] == "Renamed"  # a fetch keeps edited names
-    assert any("data:image/png;base64" in str(h.proto) for h in at.get("html"))
+    assert any("container-type:inline-size" in str(h.proto) for h in at.get("html"))  # hero pools grid
     assert user_manager._get_fs().exists("heroes-ezdraft/scouting_images/Pro_team_full.png")
 
 

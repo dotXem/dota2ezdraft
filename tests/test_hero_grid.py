@@ -117,6 +117,9 @@ def test_scouting_grid_config():
     assert [c["category_name"] for c in roster["categories"] if not c["hero_ids"]] == [
         f"Player {i}" for i in range(5)
     ]
+    # Unless it's only displayed, as in the Scouting tab
+    shown = scouting_grid_config("Rivals", [(f"Player {i}", many) for i in range(7)], max_players=None)
+    assert len([c for c in shown["categories"] if not c["hero_ids"]]) == 7
 
     # What gets downloaded is a hero grid file again
     file = {"version": 3, "configs": [grid]}

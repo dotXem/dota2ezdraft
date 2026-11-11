@@ -69,7 +69,7 @@ def dump_hero_grid_config(grid):
     return json.dumps(grid, indent="\t")
 
 
-def scouting_grid_config(config_name, players):
+def scouting_grid_config(config_name, players, max_players=SCOUT_MAX_PLAYERS):
     """Build a grid config from a scouted team: a row per player, a category per hero.
 
     players holds a (name, hero stats) pair per player, in roster order; the
@@ -77,11 +77,12 @@ def scouting_grid_config(config_name, players):
     A row starts with an empty category named after the player. Under it come
     the player's SCOUT_MAX_HEROES most played heroes, each alone in a category
     named "<games> <winrate>%". A player without data only gets the name.
-    Only the first SCOUT_MAX_PLAYERS players are used, so that the grid stays
-    within SCOUT_MAX_HEIGHT.
+    Only the first max_players players are used: SCOUT_MAX_PLAYERS by default,
+    so that the grid stays within SCOUT_MAX_HEIGHT for the game file. None keeps
+    them all, for a grid that's only displayed.
     """
     categories = []
-    for row, (name, heroes) in enumerate(players[:SCOUT_MAX_PLAYERS]):
+    for row, (name, heroes) in enumerate(players[:max_players]):
         y = row * SCOUT_ROW_STEP
         categories.append({
             "category_name": name,
