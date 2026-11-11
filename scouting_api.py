@@ -274,43 +274,108 @@ def merge_opendota_matches(all_matches, opendota_matches):
     return added
 
 
-def compute_player_hero_stats(matches, steam_id):
-    """Compute per-hero stats from match data. Returns a DataFrame."""
-    hero_stats = {}
+POSITIONS = [1, 2, 3, 4, 5]
+PLAYER_GAMES_COLUMNS = ["Hero", "Position", "Won", "Start"]
 
+
+def _position_number(position):
+    """Stratz "POSITION_3" -> 3. Unknown (None, OpenDota-only matches) -> 0."""
+    if isinstance(position, str) and position.startswith("POSITION_"):
+        try:
+            return int(position.removeprefix("POSITION_"))
+        except ValueError:
+            return 0
+    return 0
+
+
+def extract_player_games(matches, steam_id):
+    """One row per game the player played: Hero, Position (1-5, 0 if unknown), Won, Start (unix)."""
+    rows = []
     for match in matches:
-        ts = match.get("startDateTime", 0)
         radiant_win = match.get("didRadiantWin")
         for p in match.get("players") or []:
-            if p["steamAccountId"] != steam_id:
+            if p.get("steamAccountId") != steam_id:
                 continue
-            hid = p["heroId"]
-            won = (p["isRadiant"] == radiant_win) if radiant_win is not None else False
-
-            entry = hero_stats.setdefault(hid, {"games": 0, "wins": 0, "last_played": 0})
-            entry["games"] += 1
-            if won:
-                entry["wins"] += 1
-            entry["last_played"] = max(entry["last_played"], ts)
+            rows.append({
+                "Hero": STRATZ_ID_TO_HERO.get(p["heroId"], f"Unknown ({p['heroId']})"),
+                "Position": _position_number(p.get("position")),
+                "Won": (p["isRadiant"] == radiant_win) if radiant_win is not None else False,
+                "Start": match.get("startDateTime", 0),
+            })
             break
+    return pd.DataFrame(rows, columns=PLAYER_GAMES_COLUMNS)
 
+
+def hero_stats(games, positions=None):
+    """
+    Per-hero stats from extract_player_games rows, most played first.
+
+    positions keeps only the games at those positions (1-5), which leaves out
+    the games without a known position. None or empty keeps every game.
+    Pos 1 to Pos 5 count the hero's games at each position.
+    """
+    if positions:
+        games = games[games["Position"].isin(positions)]
     rows = []
-    for hid, s in hero_stats.items():
-        hero_name = STRATZ_ID_TO_HERO.get(hid, f"Unknown ({hid})")
-        winrate = round(s["wins"] / s["games"] * 100, 1) if s["games"] else 0.0
-        last_dt = datetime.datetime.utcfromtimestamp(s["last_played"])
+    for hero, g in games.groupby("Hero", sort=False):
+        n = len(g)
+        wins = int(g["Won"].sum())
+        counts = g["Position"].value_counts()
         rows.append({
-            "Icon": get_hero_icon_url(hero_name) or "",
-            "Hero": hero_name,
-            "Games": s["games"],
-            "Wins": s["wins"],
-            "Winrate": winrate,
-            "Last Played": last_dt.strftime("%Y-%m-%d"),
+            "Icon": get_hero_icon_url(hero) or "",
+            "Hero": hero,
+            "Games": n,
+            "Wins": wins,
+            "Winrate": round(wins / n * 100, 1),
+            "Last Played": datetime.datetime.fromtimestamp(int(g["Start"].max()), datetime.timezone.utc).strftime("%Y-%m-%d"),
+            **{f"Pos {pos}": int(counts.get(pos, 0)) for pos in POSITIONS},
         })
     df = pd.DataFrame(rows)
     if not df.empty:
-        df = df.sort_values("Games", ascending=False).reset_index(drop=True)
+        df = df.sort_values("Games", ascending=False, kind="stable").reset_index(drop=True)
     return df
+
+
+def compute_player_hero_stats(matches, steam_id, positions=None):
+    """Compute per-hero stats from match data. Returns a DataFrame (see hero_stats)."""
+    return hero_stats(extract_player_games(matches, steam_id), positions)
+
+
+def roster_positions(player):
+    """The positions (1-5) saved on a roster player, sorted. Empty means every position."""
+    positions = player.get("positions")
+    if positions is None:
+        return []
+    # Ints in the users file, strings from the roster editor
+    return sorted({int(p) for p in positions if str(p).strip() in {str(pos) for pos in POSITIONS}})
+
+
+def filter_hero_pools(data, players):
+    """
+    Hero pools limited to each roster player's positions.
+
+    Returns (player_heroes, left_out): hero stats per Steam ID, and per filtered
+    player the number of games left out, split into {"other": games at other
+    positions, "unknown": games without a known position}. Players without
+    positions keep their whole pool, and so does data fetched before
+    player_games existed.
+    """
+    heroes = dict(data.get("player_heroes", {}))
+    left_out = {}
+    all_games = data.get("player_games")
+    if all_games is None:
+        return heroes, left_out
+    for p in players:
+        positions = roster_positions(p)
+        sid = normalize_steam_id(p["steam_id"])
+        games = all_games.get(sid)
+        if not positions or games is None:
+            continue
+        heroes[sid] = hero_stats(games, positions)
+        kept = games["Position"].isin(positions)
+        unknown = games["Position"] == 0
+        left_out[sid] = {"other": int((~kept & ~unknown).sum()), "unknown": int(unknown.sum())}
+    return heroes, left_out
 
 
 def find_team_games(all_player_matches, steam_ids, player_names):
@@ -484,13 +549,16 @@ def build_scouting_drafts(all_player_matches, steam_ids):
 def fetch_all_scouting_data(team_players):
     """
     Fetch complete scouting data for a team.
-    Returns dict with player_names, player_heroes, team_games, drafts, and fetched_at.
+    Returns dict with player_names, player_heroes (whole pools), player_games
+    (a row per game, see extract_player_games), team_games, drafts,
+    match_sources and fetched_at.
     """
     session = requests.Session()
     steam_ids = [normalize_steam_id(p["steam_id"]) for p in team_players]
 
     player_names = {}
     player_heroes = {}
+    player_games = {}
     all_matches = {}
 
     opendota_matches = {}
@@ -531,7 +599,8 @@ def fetch_all_scouting_data(team_players):
                     seen_ids[psid].add(m["id"])
 
     for sid in steam_ids:
-        player_heroes[sid] = compute_player_hero_stats(merged_matches[sid], sid)
+        player_games[sid] = extract_player_games(merged_matches[sid], sid)
+        player_heroes[sid] = hero_stats(player_games[sid])
 
     team_games = find_team_games(all_matches, steam_ids, player_names)
     drafts = build_scouting_drafts(all_matches, steam_ids)
@@ -539,6 +608,7 @@ def fetch_all_scouting_data(team_players):
     return {
         "player_names": player_names,
         "player_heroes": player_heroes,
+        "player_games": player_games,
         "team_games": team_games,
         "drafts": drafts,
         "match_sources": match_sources,
@@ -784,7 +854,9 @@ def generate_player_image(data, steam_id):
         font_title = font
 
     # Title
-    draw.text((PAD, PAD), f"{name} — Hero Pool (2 months)", fill="#e0e0e0", font=font_title)
+    positions = data.get("player_positions", {}).get(sid)
+    pos_label = f" — Pos {'/'.join(map(str, positions))}" if positions else ""
+    draw.text((PAD, PAD), f"{name} — Hero Pool (2 months){pos_label}", fill="#e0e0e0", font=font_title)
 
     # Column headers
     y = HEADER_H
