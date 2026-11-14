@@ -4,6 +4,7 @@ import html
 import io
 import json
 import logging
+import threading
 import time
 import datetime
 import requests
@@ -188,25 +189,29 @@ def fetch_player_names(steam_ids):
     return names
 
 
-# This endpoint often takes ~20 s for an active player. A timeout isn't retried,
-# so that a hanging OpenDota costs at most a minute per player.
+# This endpoint often takes ~20 s for an active player, and minutes or a 5xx
+# when OpenDota is overloaded. A timeout isn't retried, so that a hanging
+# OpenDota costs at most a minute per player.
 OPENDOTA_MATCHES_TIMEOUT = 60
 OPENDOTA_MATCHES_ATTEMPTS = 2
+OPENDOTA_RECENT_TIMEOUT = 30
+OPENDOTA_MATCH_FIELDS = ["match_id", "player_slot", "radiant_win", "start_time", "hero_id", "lobby_type"]
+
+# Last full OpenDota history per player (account ID -> (unix time, rows)),
+# shared by every session of the process. Used when a later fetch fails, so a
+# team refetch never replaces a player's history with less.
+OPENDOTA_CACHE_TTL = 24 * 3600
+_opendota_cache = {}
+_opendota_cache_lock = threading.Lock()
 
 
-def fetch_opendota_player_matches(session, steam_id, retry_delay=2):
-    """
-    Fetch the player's matches from the past 2 months on OpenDota (one call,
-    retried once after a connection error or a 5xx).
-    Returns (matches, error): matches is a list of {match_id, player_slot,
-    radiant_win, start_time, hero_id, lobby_type}; error is None, or a short
-    reason when OpenDota failed (matches is then []).
-    """
-    account_id = normalize_steam_id(steam_id)
+def _fetch_opendota_full(session, account_id, retry_delay):
+    """The player's OpenDota matches of the past 2 months, retried once after a
+    connection error or a 5xx. Returns (rows, None) or (None, short reason)."""
     params = {
         "date": 60,
         "significant": 0,  # keep every game mode, like the Stratz query
-        "project": ["match_id", "player_slot", "radiant_win", "start_time", "hero_id", "lobby_type"],
+        "project": OPENDOTA_MATCH_FIELDS,
     }
     error = None
     for attempt in range(1, OPENDOTA_MATCHES_ATTEMPTS + 1):
@@ -214,11 +219,9 @@ def fetch_opendota_player_matches(session, steam_id, retry_delay=2):
             r = opendota_get(f"/players/{account_id}/matches", params=params,
                              timeout=OPENDOTA_MATCHES_TIMEOUT, session=session)
         except OpenDotaDailyLimitError:
-            error = "daily limit reached"
-            break
+            return None, "daily limit reached"
         except requests.Timeout:
-            error = "timed out"
-            break
+            return None, "timed out"
         except requests.RequestException as e:
             error = f"request failed ({type(e).__name__})"
         else:
@@ -229,16 +232,66 @@ def fetch_opendota_player_matches(session, steam_id, retry_delay=2):
                     data = None
                 if isinstance(data, list):
                     return data, None
-                error = "unexpected response"
-                break
+                return None, "unexpected response"
             error = f"HTTP {r.status_code}"
             if r.status_code < 500:
-                break
+                return None, error
         if attempt < OPENDOTA_MATCHES_ATTEMPTS:
             time.sleep(retry_delay)
+    return None, error
 
-    logger.warning("OpenDota matches for %s failed: %s", account_id, error)
-    return [], error
+
+def _fetch_opendota_recent(session, account_id):
+    """The player's last 20 OpenDota matches within the past 2 months (a much
+    lighter endpoint), or None if that fails too."""
+    try:
+        r = opendota_get(f"/players/{account_id}/recentMatches",
+                         timeout=OPENDOTA_RECENT_TIMEOUT, session=session)
+        data = r.json() if r.status_code == 200 else None
+    except (OpenDotaDailyLimitError, requests.RequestException, ValueError):
+        return None
+    if not isinstance(data, list):
+        return None
+    start_ts = _two_months_ago_unix()
+    return [
+        {k: row.get(k) for k in OPENDOTA_MATCH_FIELDS}
+        for row in data if (row.get("start_time") or 0) >= start_ts
+    ]
+
+
+def fetch_opendota_player_matches(session, steam_id, retry_delay=2):
+    """
+    Fetch the player's matches from the past 2 months on OpenDota.
+    If the full history fails, falls back to this process's last full history
+    of the player (up to OPENDOTA_CACHE_TTL old), then to the last 20 matches.
+    Returns (matches, status): matches is a list of {match_id, player_slot,
+    radiant_win, start_time, hero_id, lobby_type}; status is
+    {"error": None or why the full history failed,
+     "fallback": None, "cache" or "recent" (None with an error: nothing found),
+     "cached_at": ISO time of the cached history, or None}.
+    """
+    account_id = normalize_steam_id(steam_id)
+    rows, error = _fetch_opendota_full(session, account_id, retry_delay)
+    if error is None:
+        with _opendota_cache_lock:
+            _opendota_cache[account_id] = (time.time(), rows)
+        return rows, {"error": None, "fallback": None, "cached_at": None}
+
+    status = {"error": error, "fallback": None, "cached_at": None}
+    with _opendota_cache_lock:
+        cached = _opendota_cache.get(account_id)
+    if cached and time.time() - cached[0] <= OPENDOTA_CACHE_TTL:
+        status["fallback"] = "cache"
+        status["cached_at"] = datetime.datetime.fromtimestamp(
+            cached[0], datetime.timezone.utc).isoformat()
+        rows = cached[1]
+    elif error != "daily limit reached":
+        rows = _fetch_opendota_recent(session, account_id)
+        if rows is not None:
+            status["fallback"] = "recent"
+    logger.warning("OpenDota matches for %s failed: %s (fallback: %s)",
+                   account_id, error, status["fallback"])
+    return rows or [], status
 
 
 def merge_opendota_matches(all_matches, opendota_matches):
@@ -612,7 +665,9 @@ def fetch_all_scouting_data(team_players, on_player=None):
     fetch (index from 0; player is the roster entry).
     Returns dict with player_names, player_heroes (whole pools), player_games
     (a row per game, see extract_player_games), team_games, drafts,
-    match_sources ({stratz, opendota, opendota_only, opendota_error}) and fetched_at.
+    match_sources ({stratz, opendota, opendota_only, opendota_error,
+    opendota_fallback, opendota_cached_at}, see fetch_opendota_player_matches)
+    and fetched_at.
     """
     session = requests.Session()
     steam_ids = [normalize_steam_id(p["steam_id"]) for p in team_players]
@@ -623,7 +678,7 @@ def fetch_all_scouting_data(team_players, on_player=None):
     all_matches = {}
 
     opendota_matches = {}
-    opendota_errors = {}
+    opendota_status = {}
 
     edited_names = {
         normalize_steam_id(p["steam_id"]): p["name"]
@@ -636,7 +691,7 @@ def fetch_all_scouting_data(team_players, on_player=None):
         name, matches = fetch_player_data(session, sid)
         player_names[sid] = edited_names.get(sid) or name
         all_matches[sid] = matches
-        opendota_matches[sid], opendota_errors[sid] = fetch_opendota_player_matches(session, sid)
+        opendota_matches[sid], opendota_status[sid] = fetch_opendota_player_matches(session, sid)
 
     stratz_counts = {sid: len(ms) for sid, ms in all_matches.items()}
     opendota_only = merge_opendota_matches(all_matches, opendota_matches)
@@ -645,7 +700,9 @@ def fetch_all_scouting_data(team_players, on_player=None):
             "stratz": stratz_counts[sid],
             "opendota": len(opendota_matches[sid]),
             "opendota_only": opendota_only[sid],
-            "opendota_error": opendota_errors[sid],
+            "opendota_error": opendota_status[sid]["error"],
+            "opendota_fallback": opendota_status[sid]["fallback"],
+            "opendota_cached_at": opendota_status[sid]["cached_at"],
         }
         for sid in steam_ids
     }

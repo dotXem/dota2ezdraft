@@ -87,6 +87,8 @@ def test_rate_limiter_trusts_remaining_day_header():
         limiter.acquire()
 
 
+
+
 class _Resp:
     def __init__(self, status, body=None):
         self.status_code = status
@@ -96,13 +98,26 @@ class _Resp:
         return self._body
 
 
+RECENT = f"/players/{A}/recentMatches"
+FULL = f"/players/{A}/matches"
+NOW = 1_800_000_000
+
+
+@pytest.fixture(autouse=True)
+def _clean_opendota_cache(monkeypatch):
+    monkeypatch.setattr(scouting_api, "_opendota_cache", {})
+    monkeypatch.setattr(scouting_api.time, "time", lambda: NOW)
+    monkeypatch.setattr(scouting_api, "_two_months_ago_unix", lambda: NOW - 60 * 86400)
+
+
 def _stub_opendota(monkeypatch, outcomes):
-    """Make scouting_api's opendota_get return or raise each outcome in turn."""
+    """Make scouting_api's opendota_get return or raise each outcome of its
+    path in turn: outcomes is {path: [outcome, ...]}."""
     calls = []
 
     def fake_get(path, **kwargs):
         calls.append(path)
-        outcome = outcomes[len(calls) - 1]
+        outcome = outcomes[path][calls.count(path) - 1]
         if isinstance(outcome, Exception):
             raise outcome
         return outcome
@@ -111,34 +126,71 @@ def _stub_opendota(monkeypatch, outcomes):
     return calls
 
 
+def _fetch():
+    return scouting_api.fetch_opendota_player_matches(None, A, retry_delay=0)
+
+
+def _row(mid, start=NOW):
+    return {**_od_row(mid, 5), "start_time": start}
+
+
 @pytest.mark.parametrize("first", [_Resp(500), requests.ConnectionError()])
 def test_opendota_matches_retries_once(monkeypatch, first):
-    calls = _stub_opendota(monkeypatch, [first, _Resp(200, [_od_row(1, 5)])])
-    matches, error = scouting_api.fetch_opendota_player_matches(None, A, retry_delay=0)
-    assert (len(calls), error) == (2, None)
+    calls = _stub_opendota(monkeypatch, {FULL: [first, _Resp(200, [_row(1)])]})
+    matches, status = _fetch()
+    assert calls == [FULL, FULL]
+    assert status == {"error": None, "fallback": None, "cached_at": None}
     assert [m["match_id"] for m in matches] == [1]
 
 
-def test_opendota_matches_reports_failure_after_retry(monkeypatch):
-    calls = _stub_opendota(monkeypatch, [_Resp(503), _Resp(502)])
-    assert scouting_api.fetch_opendota_player_matches(None, A, retry_delay=0) == ([], "HTTP 502")
-    assert len(calls) == 2
-
-
-@pytest.mark.parametrize("outcome, error", [
-    (_Resp(404, {"error": "x"}), "HTTP 404"),
-    (OpenDotaDailyLimitError(), "daily limit reached"),
-    (requests.Timeout(), "timed out"),
+@pytest.mark.parametrize("full, error", [
+    ([_Resp(503), _Resp(502)], "HTTP 502"),
+    ([_Resp(404, {"error": "x"})], "HTTP 404"),
+    ([requests.Timeout()], "timed out"),
 ])
-def test_opendota_matches_no_retry(monkeypatch, outcome, error):
-    calls = _stub_opendota(monkeypatch, [outcome])
-    assert scouting_api.fetch_opendota_player_matches(None, A, retry_delay=0) == ([], error)
-    assert len(calls) == 1
+def test_opendota_matches_falls_back_to_recent_matches(monkeypatch, full, error):
+    recent = [{**_row(7), "kills": 3}, _row(8, start=NOW - 90 * 86400)]  # 8 is too old
+    calls = _stub_opendota(monkeypatch, {FULL: full, RECENT: [_Resp(200, recent)]})
+    matches, status = _fetch()
+    assert calls == [FULL] * len(full) + [RECENT]
+    assert status == {"error": error, "fallback": "recent", "cached_at": None}
+    assert matches == [_row(7)]
 
 
-def test_fetch_all_reports_progress_and_opendota_errors(monkeypatch):
+def test_opendota_matches_reports_total_failure(monkeypatch):
+    _stub_opendota(monkeypatch, {FULL: [requests.Timeout()], RECENT: [_Resp(500)]})
+    assert _fetch() == ([], {"error": "timed out", "fallback": None, "cached_at": None})
+
+
+def test_opendota_daily_limit_skips_recent_matches(monkeypatch):
+    calls = _stub_opendota(monkeypatch, {FULL: [OpenDotaDailyLimitError()]})
+    assert _fetch() == ([], {"error": "daily limit reached", "fallback": None, "cached_at": None})
+    assert calls == [FULL]
+
+
+def test_opendota_failure_reuses_last_full_history(monkeypatch):
+    calls = _stub_opendota(monkeypatch, {FULL: [_Resp(200, [_row(1), _row(2)]), requests.Timeout()]})
+    _fetch()
+    matches, status = _fetch()
+    assert calls == [FULL, FULL]  # no recentMatches: the cache is better
+    assert [m["match_id"] for m in matches] == [1, 2]
+    assert status["error"] == "timed out" and status["fallback"] == "cache"
+    assert status["cached_at"].startswith("2027-01-15")  # NOW, in UTC
+
+
+def test_opendota_cache_expires(monkeypatch):
+    _stub_opendota(monkeypatch, {FULL: [_Resp(200, [_row(1)]), requests.Timeout()], RECENT: [_Resp(200, [])]})
+    _fetch()
+    monkeypatch.setattr(scouting_api.time, "time", lambda: NOW + scouting_api.OPENDOTA_CACHE_TTL + 1)
+    assert _fetch() == ([], {"error": "timed out", "fallback": "recent", "cached_at": None})
+
+
+def test_fetch_all_reports_progress_and_opendota_status(monkeypatch):
     stratz = {A: [_stratz_match(1, [{"steamAccountId": A, "heroId": 5, "isRadiant": True, "position": 1}])], B: []}
-    opendota = {A: ([_od_row(2, 8)], None), B: ([], "timed out")}
+    opendota = {
+        A: ([_od_row(2, 8)], {"error": None, "fallback": None, "cached_at": None}),
+        B: ([], {"error": "timed out", "fallback": None, "cached_at": None}),
+    }
     monkeypatch.setattr(scouting_api, "fetch_player_data", lambda s, sid: (f"p{sid}", stratz[sid]))
     monkeypatch.setattr(scouting_api, "fetch_opendota_player_matches", lambda s, sid: opendota[sid])
     progress = []
@@ -149,5 +201,8 @@ def test_fetch_all_reports_progress_and_opendota_errors(monkeypatch):
     )
 
     assert progress == [(0, 2, "alice"), (1, 2, None)]
-    assert data["match_sources"][A] == {"stratz": 1, "opendota": 1, "opendota_only": 1, "opendota_error": None}
+    assert data["match_sources"][A] == {
+        "stratz": 1, "opendota": 1, "opendota_only": 1,
+        "opendota_error": None, "opendota_fallback": None, "opendota_cached_at": None,
+    }
     assert data["match_sources"][B]["opendota_error"] == "timed out"
