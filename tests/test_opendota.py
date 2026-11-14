@@ -1,8 +1,10 @@
 """OpenDota rate limiter and the Stratz/OpenDota match merge used by Scouting (offline)."""
 
 import pytest
+import requests
 
 import opendota_api
+import scouting_api
 from opendota_api import OpenDotaDailyLimitError, _RateLimiter
 from scouting_api import compute_player_hero_stats, find_team_games, merge_opendota_matches
 
@@ -83,3 +85,69 @@ def test_rate_limiter_trusts_remaining_day_header():
     limiter.update_from_headers({"X-Rate-Limit-Remaining-Day": "0"})
     with pytest.raises(OpenDotaDailyLimitError):
         limiter.acquire()
+
+
+class _Resp:
+    def __init__(self, status, body=None):
+        self.status_code = status
+        self._body = body
+
+    def json(self):
+        return self._body
+
+
+def _stub_opendota(monkeypatch, outcomes):
+    """Make scouting_api's opendota_get return or raise each outcome in turn."""
+    calls = []
+
+    def fake_get(path, **kwargs):
+        calls.append(path)
+        outcome = outcomes[len(calls) - 1]
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+    monkeypatch.setattr(scouting_api, "opendota_get", fake_get)
+    return calls
+
+
+@pytest.mark.parametrize("first", [_Resp(500), requests.ConnectionError()])
+def test_opendota_matches_retries_once(monkeypatch, first):
+    calls = _stub_opendota(monkeypatch, [first, _Resp(200, [_od_row(1, 5)])])
+    matches, error = scouting_api.fetch_opendota_player_matches(None, A, retry_delay=0)
+    assert (len(calls), error) == (2, None)
+    assert [m["match_id"] for m in matches] == [1]
+
+
+def test_opendota_matches_reports_failure_after_retry(monkeypatch):
+    calls = _stub_opendota(monkeypatch, [_Resp(503), _Resp(502)])
+    assert scouting_api.fetch_opendota_player_matches(None, A, retry_delay=0) == ([], "HTTP 502")
+    assert len(calls) == 2
+
+
+@pytest.mark.parametrize("outcome, error", [
+    (_Resp(404, {"error": "x"}), "HTTP 404"),
+    (OpenDotaDailyLimitError(), "daily limit reached"),
+    (requests.Timeout(), "timed out"),
+])
+def test_opendota_matches_no_retry(monkeypatch, outcome, error):
+    calls = _stub_opendota(monkeypatch, [outcome])
+    assert scouting_api.fetch_opendota_player_matches(None, A, retry_delay=0) == ([], error)
+    assert len(calls) == 1
+
+
+def test_fetch_all_reports_progress_and_opendota_errors(monkeypatch):
+    stratz = {A: [_stratz_match(1, [{"steamAccountId": A, "heroId": 5, "isRadiant": True, "position": 1}])], B: []}
+    opendota = {A: ([_od_row(2, 8)], None), B: ([], "timed out")}
+    monkeypatch.setattr(scouting_api, "fetch_player_data", lambda s, sid: (f"p{sid}", stratz[sid]))
+    monkeypatch.setattr(scouting_api, "fetch_opendota_player_matches", lambda s, sid: opendota[sid])
+    progress = []
+
+    data = scouting_api.fetch_all_scouting_data(
+        [{"steam_id": A, "name": "alice"}, {"steam_id": B}],
+        on_player=lambda i, total, p: progress.append((i, total, p.get("name"))),
+    )
+
+    assert progress == [(0, 2, "alice"), (1, 2, None)]
+    assert data["match_sources"][A] == {"stratz": 1, "opendota": 1, "opendota_only": 1, "opendota_error": None}
+    assert data["match_sources"][B]["opendota_error"] == "timed out"
