@@ -177,17 +177,43 @@ def fetch_scouting_with_progress(players):
     finally:
         bar.empty()
 
-    failed = [
-        f"{result['player_names'].get(sid, sid)} ({src['opendota_error']})"
+    # Players whose pools miss OpenDota games (a cached full history is fine)
+    partial = [
+        f"{result['player_names'].get(sid, sid)} ("
+        + ("last 20 games only" if src.get("opendota_fallback") == "recent" else "no games")
+        + f", {src['opendota_error']})"
         for sid, src in result.get("match_sources", {}).items()
-        if src.get("opendota_error")
+        if src.get("opendota_error") and src.get("opendota_fallback") != "cache"
     ]
-    if failed:
+    if partial:
         st.warning(
-            "OpenDota matches couldn't be fetched for " + ", ".join(failed)
-            + ". Their pools only have Stratz games: fetch again to retry."
+            "OpenDota's full match history couldn't be fetched for " + ", ".join(partial)
+            + ". Their pools are partial: fetch again to retry."
         )
     return result
+
+
+def opendota_sources_caption(src):
+    """The per-player 'Matches: ...' caption of the Scouting tab."""
+    import datetime as _dt
+    caption = f"Matches: {src['stratz']} from Stratz, "
+    error, fallback = src.get("opendota_error"), src.get("opendota_fallback")
+    if not error:
+        return caption + (f"{src['opendota']} from OpenDota, "
+                          f"{src['opendota_only']} found only on OpenDota")
+    if fallback == "cache":
+        try:
+            age = _dt.datetime.now(_dt.timezone.utc) - _dt.datetime.fromisoformat(src["opendota_cached_at"])
+            when = f"{int(age.total_seconds() // 3600)} h ago" if age.total_seconds() >= 3600 else \
+                f"{int(age.total_seconds() // 60)} min ago"
+        except (KeyError, TypeError, ValueError):
+            when = "earlier"
+        return caption + (f"{src['opendota']} from OpenDota (fetched {when}: OpenDota failed now, "
+                          f"{error}), {src['opendota_only']} found only on OpenDota")
+    if fallback == "recent":
+        return caption + (f":orange[{src['opendota']} from OpenDota, last 20 games only (full history "
+                          f"failed: {error}): fetch again to retry.] {src['opendota_only']} found only on OpenDota")
+    return caption + f":orange[OpenDota failed ({error}): fetch again to retry.]"
 
 
 def display_hero_suggestions(winrates_series, counter_scores_df, synergy_scores_df, enemy_heroes, ally_heroes, filter_list=heroes):
@@ -841,16 +867,8 @@ if show_scouting:
                                 f"[Dotabuff]({dotabuff}) · [Stratz]({stratz_url}) · [OpenDota]({opendota})"
                             )
                             sources = data.get("match_sources", {}).get(sid)
-                            if sources and sources.get("opendota_error"):
-                                st.caption(
-                                    f"Matches: {sources['stratz']} from Stratz. :orange[OpenDota failed "
-                                    f"({sources['opendota_error']}): fetch again to retry.]"
-                                )
-                            elif sources:
-                                st.caption(
-                                    f"Matches: {sources['stratz']} from Stratz, {sources['opendota']} from OpenDota, "
-                                    f"{sources['opendota_only']} found only on OpenDota"
-                                )
+                            if sources:
+                                st.caption(opendota_sources_caption(sources))
 
                             positions = data.get("player_positions", {}).get(sid)
                             if sid in left_out:
