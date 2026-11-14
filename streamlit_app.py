@@ -162,6 +162,34 @@ bracket = st.sidebar.selectbox(
 
 st.title('Dota2 - EZDraft')
 
+
+def fetch_scouting_with_progress(players):
+    """fetch_all_scouting_data with a progress bar naming the player being fetched.
+    Warns about players whose OpenDota matches couldn't be fetched."""
+    bar = st.progress(0.0, text=f"Fetching {len(players)} players from Stratz and OpenDota...")
+
+    def on_player(i, total, player):
+        label = player.get("name") or str(player["steam_id"])
+        bar.progress(i / total, text=f"Fetching {label} ({i + 1}/{total}) from Stratz and OpenDota...")
+
+    try:
+        result = fetch_all_scouting_data(players, on_player=on_player)
+    finally:
+        bar.empty()
+
+    failed = [
+        f"{result['player_names'].get(sid, sid)} ({src['opendota_error']})"
+        for sid, src in result.get("match_sources", {}).items()
+        if src.get("opendota_error")
+    ]
+    if failed:
+        st.warning(
+            "OpenDota matches couldn't be fetched for " + ", ".join(failed)
+            + ". Their pools only have Stratz games: fetch again to retry."
+        )
+    return result
+
+
 def display_hero_suggestions(winrates_series, counter_scores_df, synergy_scores_df, enemy_heroes, ally_heroes, filter_list=heroes):
     suggestions_df = suggest_heroes_from_ally_and_enemy(
         winrates_series, 
@@ -584,14 +612,13 @@ if show_scouting:
                             st.error(f"Error fetching names: {e}")
 
                 if fetch_clicked:
-                    with st.spinner(f"Fetching data for {len(players)} players from Stratz and OpenDota..."):
-                        try:
-                            result = fetch_all_scouting_data(players)
-                            st.session_state[scout_key] = result
-                            _set_fetched_names(result["player_names"])
-                            st.success("Data fetched successfully!")
-                        except Exception as e:
-                            st.error(f"Error fetching data: {e}")
+                    try:
+                        result = fetch_scouting_with_progress(players)
+                        st.session_state[scout_key] = result
+                        _set_fetched_names(result["player_names"])
+                        st.success("Data fetched successfully!")
+                    except Exception as e:
+                        st.error(f"Error fetching data: {e}")
 
                 # Roster: names shown instead of Steam IDs, and positions, editable
                 if players:
@@ -814,7 +841,12 @@ if show_scouting:
                                 f"[Dotabuff]({dotabuff}) · [Stratz]({stratz_url}) · [OpenDota]({opendota})"
                             )
                             sources = data.get("match_sources", {}).get(sid)
-                            if sources:
+                            if sources and sources.get("opendota_error"):
+                                st.caption(
+                                    f"Matches: {sources['stratz']} from Stratz. :orange[OpenDota failed "
+                                    f"({sources['opendota_error']}): fetch again to retry.]"
+                                )
+                            elif sources:
                                 st.caption(
                                     f"Matches: {sources['stratz']} from Stratz, {sources['opendota']} from OpenDota, "
                                     f"{sources['opendota_only']} found only on OpenDota"
@@ -967,11 +999,10 @@ if show_scouting:
                     players = teams[team].get("players", [])
                     scout_key = f"scout_data_{team}"
                     if scout_key not in st.session_state:
-                        with st.spinner(f"Fetching data for {len(players)} players from Stratz..."):
-                            try:
-                                st.session_state[scout_key] = fetch_all_scouting_data(players)
-                            except Exception as e:
-                                st.error(f"Error fetching data: {e}")
+                        try:
+                            st.session_state[scout_key] = fetch_scouting_with_progress(players)
+                        except Exception as e:
+                            st.error(f"Error fetching data: {e}")
                     if scout_key in st.session_state:
                         scout_data = st.session_state[scout_key]
                         player_sids = [normalize_steam_id(p["steam_id"]) for p in players]

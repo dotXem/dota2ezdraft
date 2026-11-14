@@ -3,6 +3,7 @@
 import html
 import io
 import json
+import logging
 import time
 import datetime
 import requests
@@ -11,6 +12,8 @@ from get_data_from_stratz import (
     STRATZ_API_URL, HEADERS, HEROES, STRATZ_ID_TO_HERO, STRATZ_HERO_TO_ID
 )
 from opendota_api import opendota_get, OpenDotaDailyLimitError
+
+logger = logging.getLogger(__name__)
 
 STEAM_ID_64_BASE = 76561197960265728
 
@@ -185,11 +188,19 @@ def fetch_player_names(steam_ids):
     return names
 
 
-def fetch_opendota_player_matches(session, steam_id):
+# This endpoint often takes ~20 s for an active player. A timeout isn't retried,
+# so that a hanging OpenDota costs at most a minute per player.
+OPENDOTA_MATCHES_TIMEOUT = 60
+OPENDOTA_MATCHES_ATTEMPTS = 2
+
+
+def fetch_opendota_player_matches(session, steam_id, retry_delay=2):
     """
-    Fetch the player's matches from the past 2 months on OpenDota (one call).
-    Returns a list of {match_id, player_slot, radiant_win, start_time, hero_id, lobby_type},
-    or [] if OpenDota fails or its daily limit is reached.
+    Fetch the player's matches from the past 2 months on OpenDota (one call,
+    retried once after a connection error or a 5xx).
+    Returns (matches, error): matches is a list of {match_id, player_slot,
+    radiant_win, start_time, hero_id, lobby_type}; error is None, or a short
+    reason when OpenDota failed (matches is then []).
     """
     account_id = normalize_steam_id(steam_id)
     params = {
@@ -197,14 +208,37 @@ def fetch_opendota_player_matches(session, steam_id):
         "significant": 0,  # keep every game mode, like the Stratz query
         "project": ["match_id", "player_slot", "radiant_win", "start_time", "hero_id", "lobby_type"],
     }
-    try:
-        r = opendota_get(f"/players/{account_id}/matches", params=params, timeout=30, session=session)
-    except (OpenDotaDailyLimitError, requests.RequestException):
-        return []
-    if r.status_code != 200:
-        return []
-    data = r.json()
-    return data if isinstance(data, list) else []
+    error = None
+    for attempt in range(1, OPENDOTA_MATCHES_ATTEMPTS + 1):
+        try:
+            r = opendota_get(f"/players/{account_id}/matches", params=params,
+                             timeout=OPENDOTA_MATCHES_TIMEOUT, session=session)
+        except OpenDotaDailyLimitError:
+            error = "daily limit reached"
+            break
+        except requests.Timeout:
+            error = "timed out"
+            break
+        except requests.RequestException as e:
+            error = f"request failed ({type(e).__name__})"
+        else:
+            if r.status_code == 200:
+                try:
+                    data = r.json()
+                except ValueError:
+                    data = None
+                if isinstance(data, list):
+                    return data, None
+                error = "unexpected response"
+                break
+            error = f"HTTP {r.status_code}"
+            if r.status_code < 500:
+                break
+        if attempt < OPENDOTA_MATCHES_ATTEMPTS:
+            time.sleep(retry_delay)
+
+    logger.warning("OpenDota matches for %s failed: %s", account_id, error)
+    return [], error
 
 
 def merge_opendota_matches(all_matches, opendota_matches):
@@ -571,12 +605,14 @@ def build_scouting_drafts(all_player_matches, steam_ids):
     return drafts
 
 
-def fetch_all_scouting_data(team_players):
+def fetch_all_scouting_data(team_players, on_player=None):
     """
     Fetch complete scouting data for a team.
+    on_player(index, total, player), if given, is called before each player's
+    fetch (index from 0; player is the roster entry).
     Returns dict with player_names, player_heroes (whole pools), player_games
     (a row per game, see extract_player_games), team_games, drafts,
-    match_sources and fetched_at.
+    match_sources ({stratz, opendota, opendota_only, opendota_error}) and fetched_at.
     """
     session = requests.Session()
     steam_ids = [normalize_steam_id(p["steam_id"]) for p in team_players]
@@ -587,17 +623,20 @@ def fetch_all_scouting_data(team_players):
     all_matches = {}
 
     opendota_matches = {}
+    opendota_errors = {}
 
     edited_names = {
         normalize_steam_id(p["steam_id"]): p["name"]
         for p in team_players if p.get("name_edited") and p.get("name")
     }
 
-    for sid in steam_ids:
+    for i, (player, sid) in enumerate(zip(team_players, steam_ids)):
+        if on_player:
+            on_player(i, len(steam_ids), player)
         name, matches = fetch_player_data(session, sid)
         player_names[sid] = edited_names.get(sid) or name
         all_matches[sid] = matches
-        opendota_matches[sid] = fetch_opendota_player_matches(session, sid)
+        opendota_matches[sid], opendota_errors[sid] = fetch_opendota_player_matches(session, sid)
 
     stratz_counts = {sid: len(ms) for sid, ms in all_matches.items()}
     opendota_only = merge_opendota_matches(all_matches, opendota_matches)
@@ -606,6 +645,7 @@ def fetch_all_scouting_data(team_players):
             "stratz": stratz_counts[sid],
             "opendota": len(opendota_matches[sid]),
             "opendota_only": opendota_only[sid],
+            "opendota_error": opendota_errors[sid],
         }
         for sid in steam_ids
     }
