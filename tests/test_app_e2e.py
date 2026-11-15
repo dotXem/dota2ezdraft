@@ -4,6 +4,7 @@ Needs network: the public data bucket, OpenDota, and Stratz (STRATZ_API_TOKEN in
 .env). Accounts go to a throwaway file (see conftest.py) and GCS writes to memory.
 """
 import json
+import re
 from pathlib import Path
 
 import fsspec
@@ -198,8 +199,14 @@ def test_scouting(needs_stratz):
 
     assert len(pos_captions()) == 1, errors(at)
     positions = next(iter(at.session_state["scout_data_Pro team"]["player_games"].values()))["Position"]
-    other, unknown = ((positions != 1) & (positions != 0)).sum(), (positions == 0).sum()
-    assert f"left out {other} games at other positions and {unknown} without" in pos_captions()[0]
+    known_other, unknown = ((positions != 1) & (positions != 0)).sum(), (positions == 0).sum()
+    # Games without a known position are placed with the lineup and the Draft lists:
+    # left out at other positions, left out without any, or kept
+    found = re.search(r"left out (\d+) games at other positions and (\d+) without a known position"
+                      r"(?:\. Kept (\d+) games)?", pos_captions()[0])
+    assert found, pos_captions()[0]
+    other, none, kept = (int(g or 0) for g in found.groups())
+    assert other >= known_other and other + none + kept == known_other + unknown
     at.toggle(key="scout_pos_filter").set_value(False).run()
     assert not errors(at) and not pos_captions()
 
