@@ -150,6 +150,13 @@ st.sidebar.info(f"Using {data_file.split('/')[2][:-5]} data.")
     nickname_table 
 ) = get_data(data_file)
 
+# Hero -> the positions it's in the Draft tab's p1-p5 lists of, used by Scouting
+# to place the games without a known position
+hero_positions = {}
+for pos, pos_list in enumerate([p1_list, p2_list, p3_list, p4_list, p5_list], start=1):
+    for hero in pos_list:
+        hero_positions.setdefault(hero, set()).add(pos)
+
 bracketst_str = [
     "[" + ",".join(bracket) + "]"
     for bracket in BRACKETS
@@ -698,21 +705,22 @@ if show_scouting:
                     fetched_ts = data.get("fetched_at", "")
 
                     # Hero pools limited to each player's roster positions
-                    left_out = {}
+                    by_position = False
                     if any(roster_positions(p) for p in players):
-                        if st.toggle(
+                        by_position = st.toggle(
                             "Only count games at each player's roster positions",
                             value=True,
                             key="scout_pos_filter",
-                        ):
-                            if "player_games" not in data:
-                                st.caption("This data was fetched before positions were kept: fetch it again to filter by position.")
-                            pools, left_out = filter_hero_pools(data, players)
-                            # player_positions titles the player images
-                            data = {**data, "player_heroes": pools, "player_positions": {
-                                sid: roster_positions(p) for p in players
-                                if (sid := normalize_steam_id(p["steam_id"])) in left_out
-                            }}
+                        )
+                        if by_position and "player_games" not in data:
+                            st.caption("This data was fetched before positions were kept: fetch it again to filter by position.")
+                    # Games without a known position count at every position they may have been
+                    pools, left_out = filter_hero_pools(data, players, hero_positions, by_position)
+                    # player_positions titles the player images
+                    data = {**data, "player_heroes": pools, "player_positions": {
+                        sid: roster_positions(p) for p in players
+                        if (sid := normalize_steam_id(p["steam_id"])) in left_out
+                    }}
 
                     # Hero pools as a hero grid, laid out like the Config tab (every player, no game height limit)
                     pools_grid = scouting_grid_config(selected_team, [
@@ -872,10 +880,14 @@ if show_scouting:
 
                             positions = data.get("player_positions", {}).get(sid)
                             if sid in left_out:
+                                inferred = left_out[sid].get("inferred", 0)
                                 st.caption(
                                     f"Pos {'/'.join(map(str, positions))} only: left out "
                                     f"{left_out[sid]['other']} games at other positions and "
                                     f"{left_out[sid]['unknown']} without a known position"
+                                    + (f". Kept {inferred} games without a recorded position that may have been "
+                                       "at these positions, going by the lineup and the Draft tab's position lists"
+                                       if inferred else "")
                                 )
 
                             if hero_df.empty and sum(left_out.get(sid, {}).values()):
@@ -891,6 +903,11 @@ if show_scouting:
                                     column_config={
                                         "Icon": st.column_config.ImageColumn("", width="small"),
                                         "Winrate": st.column_config.NumberColumn(format="%.1f%%"),
+                                        **{f"Pos {pos}": st.column_config.NumberColumn(
+                                            help="Games at this position. A game without a recorded position "
+                                                 "counts at every position it may have been, going by the "
+                                                 "lineup and the Draft tab's position lists.",
+                                        ) for pos in POSITIONS},
                                     },
                                     hide_index=True,
                                     width="stretch",
@@ -1024,10 +1041,7 @@ if show_scouting:
                     if scout_key in st.session_state:
                         scout_data = st.session_state[scout_key]
                         player_sids = [normalize_steam_id(p["steam_id"]) for p in players]
-                        if by_position:
-                            pools, _ = filter_hero_pools(scout_data, players)
-                        else:
-                            pools = scout_data.get("player_heroes", {})
+                        pools, _ = filter_hero_pools(scout_data, players, hero_positions, by_position)
                         new_grid = scouting_grid_config(team, [
                             (
                                 p.get("name") or scout_data.get("player_names", {}).get(sid) or str(sid),

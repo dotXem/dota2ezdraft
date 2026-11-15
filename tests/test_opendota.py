@@ -206,3 +206,19 @@ def test_fetch_all_reports_progress_and_opendota_status(monkeypatch):
         "opendota_error": None, "opendota_fallback": None, "opendota_cached_at": None,
     }
     assert data["match_sources"][B]["opendota_error"] == "timed out"
+
+
+def test_opendota_only_match_keeps_the_lineup():
+    heroes = {str(slot): {"hero_id": hero} for slot, hero in
+              zip([0, 1, 2, 3, 4, 128, 129, 130, 131, 132], range(1, 11))}
+    all_matches = {A: [], B: []}
+    merge_opendota_matches(all_matches, {A: [{**_od_row(4, 3, slot=2), "heroes": heroes}], B: [_od_row(5, 3)]})
+
+    assert all_matches[A][0]["lineup"] == {"radiant": [1, 2, 3, 4, 5], "dire": [6, 7, 8, 9, 10]}
+    assert "lineup" not in all_matches[B][0]  # /recentMatches rows have no heroes field
+    assert scouting_api.extract_player_games(all_matches[A], A)["Team"].tolist()[0][2] == \
+        scouting_api.STRATZ_ID_TO_HERO[3]
+
+    # An incomplete lineup is dropped
+    assert scouting_api._opendota_lineup({"heroes": {"0": {"hero_id": 1}}}) is None
+    assert scouting_api._opendota_lineup({}) is None

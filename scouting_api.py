@@ -2,6 +2,7 @@
 
 import html
 import io
+import itertools
 import json
 import logging
 import threading
@@ -195,7 +196,9 @@ def fetch_player_names(steam_ids):
 OPENDOTA_MATCHES_TIMEOUT = 60
 OPENDOTA_MATCHES_ATTEMPTS = 2
 OPENDOTA_RECENT_TIMEOUT = 30
-OPENDOTA_MATCH_FIELDS = ["match_id", "player_slot", "radiant_win", "start_time", "hero_id", "lobby_type"]
+# heroes: every player's hero and slot, used to deduce positions (/recentMatches has no such field)
+OPENDOTA_MATCH_FIELDS = ["match_id", "player_slot", "radiant_win", "start_time", "hero_id", "lobby_type", "heroes"]
+OPENDOTA_RECENT_FIELDS = [f for f in OPENDOTA_MATCH_FIELDS if f != "heroes"]
 
 # Last full OpenDota history per player (account ID -> (unix time, rows)),
 # shared by every session of the process. Used when a later fetch fails, so a
@@ -254,7 +257,7 @@ def _fetch_opendota_recent(session, account_id):
         return None
     start_ts = _two_months_ago_unix()
     return [
-        {k: row.get(k) for k in OPENDOTA_MATCH_FIELDS}
+        {k: row.get(k) for k in OPENDOTA_RECENT_FIELDS}
         for row in data if (row.get("start_time") or 0) >= start_ts
     ]
 
@@ -265,7 +268,7 @@ def fetch_opendota_player_matches(session, steam_id, retry_delay=2):
     If the full history fails, falls back to this process's last full history
     of the player (up to OPENDOTA_CACHE_TTL old), then to the last 20 matches.
     Returns (matches, status): matches is a list of {match_id, player_slot,
-    radiant_win, start_time, hero_id, lobby_type}; status is
+    radiant_win, start_time, hero_id, lobby_type, heroes}; status is
     {"error": None or why the full history failed,
      "fallback": None, "cache" or "recent" (None with an error: nothing found),
      "cached_at": ISO time of the cached history, or None}.
@@ -294,6 +297,26 @@ def fetch_opendota_player_matches(session, steam_id, retry_delay=2):
     return rows or [], status
 
 
+def _opendota_lineup(row):
+    """The hero IDs of each side, {"radiant": [5 IDs], "dire": [5 IDs]}, from an
+    OpenDota row's heroes field. None when it's missing or incomplete."""
+    heroes = row.get("heroes")
+    if not isinstance(heroes, dict):
+        return None
+    lineup = {"radiant": [], "dire": []}
+    for slot, player in heroes.items():
+        try:
+            side = "radiant" if int(slot) < 128 else "dire"
+        except (TypeError, ValueError):
+            return None
+        hero_id = (player or {}).get("hero_id")
+        if hero_id:
+            lineup[side].append(hero_id)
+    if len(lineup["radiant"]) != 5 or len(lineup["dire"]) != 5:
+        return None
+    return lineup
+
+
 def merge_opendota_matches(all_matches, opendota_matches):
     """
     Add OpenDota matches to the Stratz ones (Stratz match dict format), in place.
@@ -301,7 +324,8 @@ def merge_opendota_matches(all_matches, opendota_matches):
     - A match Stratz already has is kept once. If Stratz lists the player as
       anonymous, their account ID is filled in from OpenDota (same hero, same side).
     - A match only OpenDota has becomes a partial match: no pick/bans, no league,
-      and only the scouted players OpenDota reported in it.
+      and only the scouted players OpenDota reported in it, plus a "lineup" of
+      each side's hero IDs when OpenDota sent one (see _opendota_lineup).
     Returns {steam_id: number of matches added from OpenDota only}.
     """
     by_id = {}
@@ -336,6 +360,10 @@ def merge_opendota_matches(all_matches, opendota_matches):
                 added[sid] += 1
             elif m.get("source") == "opendota" and mid not in own_ids[sid]:
                 added[sid] += 1
+            if m.get("source") == "opendota" and not m.get("lineup"):
+                lineup = _opendota_lineup(row)
+                if lineup:
+                    m["lineup"] = lineup
 
             players = m.setdefault("players", [])
             if not any(p.get("steamAccountId") == sid for p in players):
@@ -362,7 +390,7 @@ def merge_opendota_matches(all_matches, opendota_matches):
 
 
 POSITIONS = [1, 2, 3, 4, 5]
-PLAYER_GAMES_COLUMNS = ["Hero", "Position", "Won", "Start"]
+PLAYER_GAMES_COLUMNS = ["Hero", "Position", "Won", "Start", "Team"]
 
 
 def _position_number(position):
@@ -375,39 +403,111 @@ def _position_number(position):
     return 0
 
 
+def _hero_name(hero_id):
+    return STRATZ_ID_TO_HERO.get(hero_id, f"Unknown ({hero_id})")
+
+
+def _team_heroes(match, player):
+    """The 5 hero names on the player's side (theirs included), or () if unknown."""
+    lineup = (match.get("lineup") or {}).get("radiant" if player.get("isRadiant") else "dire")
+    if lineup is None:
+        lineup = [q.get("heroId") for q in match.get("players") or []
+                  if q.get("isRadiant") == player.get("isRadiant")]
+    if len(lineup) != 5 or not all(lineup):
+        return ()
+    return tuple(_hero_name(h) for h in lineup)
+
+
 def extract_player_games(matches, steam_id):
-    """One row per game the player played: Hero, Position (1-5, 0 if unknown), Won, Start (unix)."""
+    """
+    One row per game the player played: Hero, Position (1-5, 0 if unknown),
+    Won, Start (unix), and Team: the 5 heroes on the player's side when the
+    position is unknown and the lineup is known, else ().
+    """
     rows = []
     for match in matches:
         radiant_win = match.get("didRadiantWin")
         for p in match.get("players") or []:
             if p.get("steamAccountId") != steam_id:
                 continue
+            position = _position_number(p.get("position"))
             rows.append({
-                "Hero": STRATZ_ID_TO_HERO.get(p["heroId"], f"Unknown ({p['heroId']})"),
-                "Position": _position_number(p.get("position")),
+                "Hero": _hero_name(p["heroId"]),
+                "Position": position,
                 "Won": (p["isRadiant"] == radiant_win) if radiant_win is not None else False,
                 "Start": match.get("startDateTime", 0),
+                "Team": () if position else _team_heroes(match, p),
             })
             break
     return pd.DataFrame(rows, columns=PLAYER_GAMES_COLUMNS)
 
 
-def hero_stats(games, positions=None):
+def possible_positions(hero, team, hero_positions):
+    """
+    The positions a game without a known position counts at, sorted.
+
+    hero_positions maps a hero to the positions it's played at (the Draft tab's
+    p1-p5 lists). With the 5 heroes of the player's side, these are the
+    player's positions in every way of giving the 5 heroes 5 different positions
+    from their lists (a teammate without a list can take any position). With no
+    lineup, or one that fits no such way, they are the hero's own positions.
+    """
+    own = tuple(sorted(hero_positions.get(hero, ())))
+    team = list(team or ())
+    if len(team) != 5 or hero not in team:
+        return own
+    i = team.index(hero)
+    allowed = [hero_positions.get(h) or POSITIONS for h in team]
+    found = {
+        perm[i] for perm in itertools.permutations(POSITIONS)
+        if all(perm[j] in allowed[j] for j in range(5))
+    }
+    return tuple(sorted(found)) or own
+
+
+def game_positions(games, hero_positions=None):
+    """
+    The positions each extract_player_games row counts at, as a Series of
+    tuples: (position,) when known, else possible_positions with hero_positions,
+    else (). Rows without a Team column (data fetched before it existed) use the
+    hero's own positions.
+    """
+    teams = games["Team"] if "Team" in games.columns else [()] * len(games)
+    memo = {}
+    out = []
+    for hero, position, team in zip(games["Hero"], games["Position"], teams):
+        if position:
+            out.append((int(position),))
+        elif hero_positions:
+            key = (hero, tuple(team or ()))
+            if key not in memo:
+                memo[key] = possible_positions(hero, key[1], hero_positions)
+            out.append(memo[key])
+        else:
+            out.append(())
+    return pd.Series(out, index=games.index, dtype=object)
+
+
+def hero_stats(games, positions=None, hero_positions=None):
     """
     Per-hero stats from extract_player_games rows, most played first.
 
-    positions keeps only the games at those positions (1-5), which leaves out
-    the games without a known position. None or empty keeps every game.
-    Pos 1 to Pos 5 count the hero's games at each position.
+    Each game counts at the positions game_positions gives it: a game whose
+    position is unsure counts at every position it may have been. positions
+    keeps only the games counting at one of those positions (1-5), which
+    leaves out the games without any. None or empty keeps every game.
+    Pos 1 to Pos 5 count the hero's games at each position, so an unsure game
+    adds to several of them.
     """
+    at = game_positions(games, hero_positions)
     if positions:
-        games = games[games["Position"].isin(positions)]
+        keep = pd.Series([any(p in positions for p in ps) for ps in at], index=games.index, dtype=bool)
+        games, at = games.loc[keep], at.loc[keep]
     rows = []
     for hero, g in games.groupby("Hero", sort=False):
         n = len(g)
         wins = int(g["Won"].sum())
-        counts = g["Position"].value_counts()
+        hero_at = at.loc[g.index]
         rows.append({
             "Icon": get_hero_icon_url(hero) or "",
             "Hero": hero,
@@ -415,7 +515,7 @@ def hero_stats(games, positions=None):
             "Wins": wins,
             "Winrate": round(wins / n * 100, 1),
             "Last Played": datetime.datetime.fromtimestamp(int(g["Start"].max()), datetime.timezone.utc).strftime("%Y-%m-%d"),
-            **{f"Pos {pos}": int(counts.get(pos, 0)) for pos in POSITIONS},
+            **{f"Pos {pos}": sum(pos in ps for ps in hero_at) for pos in POSITIONS},
         })
     df = pd.DataFrame(rows)
     if not df.empty:
@@ -437,15 +537,21 @@ def roster_positions(player):
     return sorted({int(p) for p in positions if str(p).strip() in {str(pos) for pos in POSITIONS}})
 
 
-def filter_hero_pools(data, players):
+def filter_hero_pools(data, players, hero_positions=None, by_position=True):
     """
     Hero pools limited to each roster player's positions.
 
+    hero_positions (hero -> positions, the Draft tab's p1-p5 lists) places the
+    games without a known position (see possible_positions): those count at
+    every position they may have been, in the filter and in the Pos columns.
+    With it, every player's pool is rebuilt, filtered or not. by_position=False
+    keeps every game.
+
     Returns (player_heroes, left_out): hero stats per Steam ID, and per filtered
-    player the number of games left out, split into {"other": games at other
-    positions, "unknown": games without a known position}. Players without
-    positions keep their whole pool, and so does data fetched before
-    player_games existed.
+    player {"other": games left out at other positions, "unknown": games left
+    out without any position, "inferred": games kept without a known
+    position}. Players without positions keep their whole pool, and so does
+    data fetched before player_games existed.
     """
     heroes = dict(data.get("player_heroes", {}))
     left_out = {}
@@ -453,15 +559,23 @@ def filter_hero_pools(data, players):
     if all_games is None:
         return heroes, left_out
     for p in players:
-        positions = roster_positions(p)
+        positions = roster_positions(p) if by_position else []
         sid = normalize_steam_id(p["steam_id"])
         games = all_games.get(sid)
-        if not positions or games is None:
+        if games is None or not (positions or hero_positions):
             continue
-        heroes[sid] = hero_stats(games, positions)
-        kept = games["Position"].isin(positions)
-        unknown = games["Position"] == 0
-        left_out[sid] = {"other": int((~kept & ~unknown).sum()), "unknown": int(unknown.sum())}
+        heroes[sid] = hero_stats(games, positions, hero_positions)
+        if not positions:
+            continue
+        at = game_positions(games, hero_positions)
+        kept = at.map(lambda ps: any(pos in positions for pos in ps)).astype(bool)
+        none = at.map(len) == 0
+        unknown_pos = games["Position"] == 0
+        left_out[sid] = {
+            "other": int((~kept & ~none).sum()),
+            "unknown": int(none.sum()),
+            "inferred": int((kept & unknown_pos).sum()),
+        }
     return heroes, left_out
 
 
